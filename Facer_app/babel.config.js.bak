@@ -1,0 +1,17 @@
+module.exports = function (api) {
+  api.cache(true);
+
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: [
+      // expo-router plugin (if using expo-router)
+      'expo-router/babel',
+
+      // nativewind — must be array style when passing options
+      ['nativewind/babel', { jsxImportSource: 'nativewind' }],
+
+      // react-native-reanimated plugin MUST be last
+      'react-native-reanimated/plugin'
+    ],
+  };
+};
