@@ -75,16 +75,23 @@ export default function FacultySidebar() {
             </div>
           </div>
 
-          <nav className="flex flex-col gap-3">
-            <NavItem to="/faculty" label="Dashboard" end icon={<BarChart3 className="w-5 h-5" />} onClick={close} />
+          <nav className="flex flex-col gap-6">
+            {/* Main Navigation */}
+            <div className="space-y-2">
+              <NavItem to="/faculty" label="Dashboard" end icon={<BarChart3 className="w-5 h-5" />} onClick={close} />
+            </div>
 
-            <div className="mt-3 space-y-2">
+            {/* Attendance Section */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-2">Attendance</p>
               <NavItem to="/faculty/generate-qr" label="Generate QR" icon={<QrCode className="w-5 h-5" />} onClick={close} />
               <NavItem to="/faculty/create-attendance" label="Create Attendance" icon={<Plus className="w-5 h-5" />} onClick={close} />
               <NavItem to="/faculty/attendance" label="Attendance Reports" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
             </div>
 
-            <div className="mt-4 space-y-2">
+            {/* Settings Section */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-2">Other</p>
               <NavItem to="/faculty/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
               <NavItem to="/faculty/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />
             </div>
@@ -123,13 +130,16 @@ export default function FacultySidebar() {
             </button>
           </div>
 
-          <nav className="flex flex-col gap-2">
+          <nav className="flex flex-col gap-3">
             <NavItem to="/faculty" label="Dashboard" end icon={<BarChart3 className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/faculty/generate-qr" label="Generate QR" icon={<QrCode className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/faculty/create-attendance" label="Create Attendance" icon={<Plus className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/faculty/attendance" label="Attendance Reports" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
 
-            <div className="mt-4 border-t pt-4">
+            <div className="border-t pt-3 space-y-2">
+              <NavItem to="/faculty/generate-qr" label="Generate QR" icon={<QrCode className="w-5 h-5" />} onClick={close} />
+              <NavItem to="/faculty/create-attendance" label="Create Attendance" icon={<Plus className="w-5 h-5" />} onClick={close} />
+              <NavItem to="/faculty/attendance" label="Attendance Reports" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
+            </div>
+
+            <div className="border-t pt-3 space-y-2">
               <NavItem to="/faculty/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
               <NavItem to="/faculty/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />
             </div>

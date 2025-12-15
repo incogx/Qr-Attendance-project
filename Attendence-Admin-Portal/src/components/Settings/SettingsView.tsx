@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
+import { Lock, LogOut } from "lucide-react";
+import ChangePasswordModal from "./ChangePasswordModal";
+import ForgotPasswordModal from "./ForgotPasswordModal";
 
 export default function SettingsView() {
   const { user, profile, loading, signOut } = useAuth() as any;
@@ -12,6 +15,8 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   useEffect(() => {
     // if auth finished loading and there's no user -> go to login
@@ -128,15 +133,45 @@ export default function SettingsView() {
           </div>
 
           <div className="pt-6 border-t mt-4">
+            <h4 className="text-sm font-semibold text-gray-800 mb-4">Password & Security</h4>
+            <div className="space-y-3 mb-6">
+              <button
+                type="button"
+                onClick={() => setChangePasswordOpen(true)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-3">
+                  <Lock className="w-5 h-5 text-gray-600" />
+                  <span className="text-gray-700 font-medium">Change Password</span>
+                </div>
+                <span className="text-gray-400">→</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setForgotPasswordOpen(true)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-3">
+                  <Lock className="w-5 h-5 text-gray-600" />
+                  <span className="text-gray-700 font-medium">Reset Password</span>
+                </div>
+                <span className="text-gray-400">→</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-6 border-t mt-4">
             <h4 className="text-sm font-semibold text-gray-800 mb-2">Danger zone</h4>
             <p className="text-sm text-gray-500 mb-3">Sign out of this session and clear local state.</p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+                className="flex items-center gap-2 px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
                 disabled={signingOut}
               >
+                <LogOut className="w-4 h-4" />
                 {signingOut ? "Signing out..." : "Sign out"}
               </button>
               <button
@@ -178,6 +213,25 @@ export default function SettingsView() {
           </button>
         </div>
       )}
+
+      {/* Modals */}
+      <ChangePasswordModal
+        isOpen={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+        onSuccess={() => {
+          setToast({ type: "success", message: "Password changed successfully!" });
+          setTimeout(() => setToast(null), 2000);
+        }}
+      />
+
+      <ForgotPasswordModal
+        isOpen={forgotPasswordOpen}
+        onClose={() => setForgotPasswordOpen(false)}
+        onSuccess={() => {
+          setToast({ type: "success", message: "Check your email for reset instructions!" });
+          setTimeout(() => setToast(null), 2000);
+        }}
+      />
     </div>
   );
 }

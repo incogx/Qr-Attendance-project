@@ -1,84 +1,117 @@
 // src/components/faculty/CreateAttendancePage.tsx
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, ArrowLeft, CheckCircle, XCircle, Loader } from "lucide-react";
-import { AttendanceReport, AttendanceEntry } from "../../types/attendance";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 /**
  * CreateAttendancePage
- * - Marks attendance for a class on a given date.
- * - Sends standardized payload to API: { facultyId, departmentId, classId, date, semester, status, entries: [...] }
- *
- * NOTES:
- * - Adjust API_CREATE to match your server (currently "/api/attendance").
- * - Ensure backend expects camelCase keys (facultyId/classId). If your backend expects snake_case, either adapt here
- *   or update server to accept camelCase.
+ * - Marks attendance for a class using the new database schema.
+ * - Creates a session and attendance_marks records in Supabase.
+ * - Fetches faculty's classes and students for selected class from real database.
  */
 
-const API_CREATE = "/api/attendance"; // <-- change if your server uses another path
-const API_LIST_STUDENTS = "/api/students?classId="; // optional: if you have a students API
+interface StudentEntry {
+  id: string;
+  student_id: string;
+  reg_number: string;
+  name: string;
+  present: boolean;
+}
+
+interface ClassOption {
+  id: string;
+  class_no: string;
+  department?: string;
+}
 
 export default function CreateAttendancePage() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth() as any;
+  const { user } = useAuth() as any;
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [classes, setClasses] = useState<ClassOption[]>([]);
   const [classId, setClassId] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [semester, setSemester] = useState("Fall 2023");
-  const [students, setStudents] = useState<AttendanceEntry[]>([]);
-  const [departmentId, setDepartmentId] = useState<string | null>(
-    (profile?.departmentId as string) ?? (profile?.department_id as string) ?? "CSE"
-  );
+  const [students, setStudents] = useState<StudentEntry[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(true);
+  const [loadingStudents, setLoadingStudents] = useState(false);
 
-  // Load students for the selected class.
-  // If you have a real students API, replace the mock below with a fetch to API_LIST_STUDENTS + classId.
+  // Fetch faculty's classes on mount
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchClasses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("class_faculty")
+          .select("class_id, classes(id, class_no, department)")
+          .eq("faculty_id", user.id);
+
+        if (error) throw error;
+
+        const classList = (data || [])
+          .map((item: any) => ({
+            id: item.classes?.id || "",
+            class_no: item.classes?.class_no || "",
+            department: item.classes?.department,
+          }))
+          .filter((cls) => cls.id);
+
+        setClasses(classList);
+      } catch (err) {
+        console.error("Error fetching classes:", err);
+        setError("Failed to load classes");
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    fetchClasses();
+  }, [user]);
+
+  // Fetch students for selected class
   useEffect(() => {
     if (!classId) {
       setStudents([]);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    const fetchStudents = async () => {
+      setLoadingStudents(true);
+      setError(null);
 
-    // If you have a backend endpoint for students, use fetch instead:
-    // fetch(`${API_LIST_STUDENTS}${encodeURIComponent(classId)}`)
-    //   .then(res => res.json())
-    //   .then(data => setStudents(mapFromApi(data)))
-    //   .catch(err => setError(String(err)))
-    //   .finally(() => setLoading(false));
+      try {
+        const { data, error } = await supabase
+          .from("students")
+          .select("id, reg_number, name")
+          .eq("class_id", classId)
+          .order("name");
 
-    // Mock data fallback (keeps current behaviour)
-    const t = setTimeout(() => {
-      const mockStudents: AttendanceEntry[] = [
-        {
-          id: "1",
-          report_id: "",
-          student_id: "s1",
-          student_name: "John Doe",
-          roll_number: "001",
-          present: true,
-        },
-        {
-          id: "2",
-          report_id: "",
-          student_id: "s2",
-          student_name: "Jane Smith",
-          roll_number: "002",
+        if (error) throw error;
+
+        const studentList = (data || []).map((student: any) => ({
+          id: student.id,
+          student_id: student.id,
+          reg_number: student.reg_number,
+          name: student.name || "Unknown",
           present: false,
-        },
-        // add more mock entries as desired
-      ];
-      setStudents(mockStudents);
-      setLoading(false);
-    }, 800);
+        }));
 
-    return () => clearTimeout(t);
+        setStudents(studentList);
+      } catch (err) {
+        console.error("Error fetching students:", err);
+        setError("Failed to load students");
+      } finally {
+        setLoadingStudents(false);
+      }
+    };
+
+    fetchStudents();
   }, [classId]);
 
   // Toggle present/absent for a student
@@ -90,25 +123,7 @@ export default function CreateAttendancePage() {
     );
   };
 
-  // Build payload expected by most backends (camelCase)
-  const buildPayload = () => {
-    const facultyId = profile?.id ?? user?.id ?? null;
-    return {
-      facultyId,
-      departmentId,
-      classId,
-      date,
-      semester,
-      status: "DRAFT",
-      entries: students.map((s) => ({
-        studentId: s.student_id,
-        studentName: s.student_name,
-        rollNumber: s.roll_number,
-        present: !!s.present,
-      })),
-    };
-  };
-
+  // Save attendance to database
   const handleSave = async () => {
     setError(null);
     setSuccess(null);
@@ -122,10 +137,10 @@ export default function CreateAttendancePage() {
       return;
     }
     if (students.length === 0) {
-      setError("No students loaded for this class.");
+      setError("No students found for this class.");
       return;
     }
-    if (!profile && !user) {
+    if (!user) {
       setError("You must be signed in to create attendance.");
       return;
     }
@@ -133,39 +148,44 @@ export default function CreateAttendancePage() {
     setLoading(true);
 
     try {
-      const payload = buildPayload();
+      // 1. Create a session record
+      const { data: sessionData, error: sessionError } = await supabase
+        .from("sessions")
+        .insert({
+          class_id: classId,
+          qr_payload: `session_${Date.now()}`,
+          status: "ACTIVE",
+          session_date: date,
+          start_time: new Date().toISOString(),
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
 
-      // POST to server
-      const res = await fetch(API_CREATE, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      if (sessionError) throw new Error(`Failed to create session: ${sessionError.message}`);
 
-      if (!res.ok) {
-        // try to read error message
-        let message = `Failed to create attendance (${res.status})`;
-        try {
-          const json = await res.json();
-          message = json?.message || message;
-        } catch {
-          const text = await res.text().catch(() => "");
-          if (text) message = text;
-        }
-        throw new Error(message);
-      }
+      const sessionId = sessionData.id;
 
-      // server should return the created report
-      const created: AttendanceReport | any = await res.json();
+      // 2. Create attendance_marks records for each student
+      const attendanceRecords = students.map((student) => ({
+        student_id: student.student_id,
+        class_id: classId,
+        session_id: sessionId,
+        status: student.present ? "PRESENT" : "ABSENT",
+        marked_at: new Date().toISOString(),
+      }));
+
+      const { error: attendanceError } = await supabase
+        .from("attendance_marks")
+        .insert(attendanceRecords);
+
+      if (attendanceError) throw new Error(`Failed to save attendance: ${attendanceError.message}`);
 
       setSuccess("Attendance saved successfully.");
-      // small delay so user sees success before redirect
       setTimeout(() => navigate("/faculty/attendance"), 700);
     } catch (err: any) {
-      console.error("CreateAttendance error:", err);
-      setError(err?.message ?? "Failed to save attendance report.");
+      console.error("Error saving attendance:", err);
+      setError(err?.message ?? "Failed to save attendance.");
     } finally {
       setLoading(false);
     }
@@ -202,19 +222,29 @@ export default function CreateAttendancePage() {
       )}
 
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Class</label>
-            <select
-              value={classId}
-              onChange={(e) => setClassId(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={loading}
-            >
-              <option value="">Select Class</option>
-              <option value="CS201">CS201</option>
-              <option value="CS202">CS202</option>
-            </select>
+            {loadingClasses ? (
+              <div className="flex items-center gap-2 p-2 text-slate-500">
+                <Loader className="w-4 h-4 animate-spin" />
+                Loading classes...
+              </div>
+            ) : (
+              <select
+                value={classId}
+                onChange={(e) => setClassId(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={loading}
+              >
+                <option value="">Select Class</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.class_no} {cls.department ? `(${cls.department})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>
@@ -227,30 +257,19 @@ export default function CreateAttendancePage() {
               disabled={loading}
             />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Semester</label>
-            <select
-              value={semester}
-              onChange={(e) => setSemester(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={loading}
-            >
-              <option value="Fall 2023">Fall 2023</option>
-              <option value="Spring 2024">Spring 2024</option>
-            </select>
-          </div>
         </div>
 
         {classId && (
           <div>
             <h3 className="text-lg font-medium text-slate-900 mb-4">Mark Attendance</h3>
 
-            {loading && students.length === 0 ? (
+            {loadingStudents && students.length === 0 ? (
               <div className="flex items-center justify-center py-8">
                 <Loader className="w-6 h-6 animate-spin text-blue-600" />
                 <span className="ml-2 text-slate-600">Loading students...</span>
               </div>
+            ) : students.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">No students found for this class</div>
             ) : (
               <div className="space-y-2">
                 {students.map((student) => (
@@ -259,8 +278,8 @@ export default function CreateAttendancePage() {
                     className="flex items-center justify-between p-3 border border-slate-200 rounded-lg"
                   >
                     <div>
-                      <p className="font-medium text-slate-900">{student.student_name}</p>
-                      <p className="text-sm text-slate-500">Roll: {student.roll_number}</p>
+                      <p className="font-medium text-slate-900">{student.name}</p>
+                      <p className="text-sm text-slate-500">Reg: {student.reg_number}</p>
                     </div>
                     <button
                       onClick={() => togglePresent(student.student_id)}

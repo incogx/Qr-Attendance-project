@@ -14,6 +14,7 @@ import AnalyticsView from "../components/Analytics/AnalyticsView";
 import NotificationCenter from "../components/Notifications/NotificationCenter";
 import ContentModeration from "../components/Moderation/ContentModeration";
 import SettingsView from "../components/Settings/SettingsView";
+import ProfilePage from "../components/Common/ProfilePage";
 
 // admin attendance management (ensure this file exists at this path)
 import AttendanceManagement from "../components/admin/AttendanceManagement";
@@ -54,6 +55,7 @@ export default function AdminPortal() {
             {/* messaging */}
             <Route path="messaging" element={<MessagingSystem />} />
 
+            <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsView />} />
 
             {/* add more admin routes here as needed */}

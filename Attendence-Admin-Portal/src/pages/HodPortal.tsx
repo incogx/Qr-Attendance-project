@@ -9,6 +9,7 @@ import HodApprovals from "../components/hod/HodApprovals";
 
 import NotificationCenter from "../components/Notifications/NotificationCenter";
 import SettingsView from "../components/Settings/SettingsView";
+import ProfilePage from "../components/Common/ProfilePage";
 import { Routes, Route } from "react-router-dom";
 
 export default function HodPortal() {
@@ -35,6 +36,7 @@ export default function HodPortal() {
             <Route path="attendance" element={<DepartmentAttendance />} />
             <Route path="approvals" element={<HodApprovals />} />
             <Route path="notifications" element={<NotificationCenter />} />
+            <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsView />} />
           </Routes>
         </main>

@@ -3,6 +3,7 @@ import AdminPortal from "./pages/AdminPortal";
 import HodPortal from "./pages/HodPortal";
 import FacultyPortal from "./pages/FacultyPortal";
 import DebugApprovals from "./pages/DebugApprovals";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import RedirectToRole from "./components/RedirectToRole";
 import LoginForm from "./components/Auth/LoginForm";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -15,6 +16,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RedirectToRole />} />
           <Route path="/login" element={<LoginForm />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/debug/approvals" element={<DebugApprovals />} />
           <Route path="/admin/*" element={<AdminPortal />} />
           <Route path="/hod/*" element={<HodPortal />} />
