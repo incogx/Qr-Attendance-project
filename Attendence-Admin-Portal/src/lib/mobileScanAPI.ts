@@ -71,7 +71,7 @@ export async function handleMobileScan(payload: {
 
     // Check if student already marked for this session
     const { data: existing } = await supabase
-      .from('attendance')
+      .from('attendance_marks')
       .select('id')
       .eq('session_id', session.id)
       .eq('student_id', student.id)
@@ -86,12 +86,13 @@ export async function handleMobileScan(payload: {
 
     // Mark attendance
     const { error } = await supabase
-      .from('attendance')
+      .from('attendance_marks')
       .insert([
         {
           student_id: student.id,
           class_id: classData.id,
           session_id: session.id,
+          status: 'PRESENT',
         },
       ]);
 

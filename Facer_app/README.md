@@ -26,7 +26,7 @@ A modern student attendance system with QR code scanning and face verification, 
 Create a `.env` file in the project root (or configure in your Expo environment):
 
 ```env
-EXPO_PUBLIC_SUPABASE_URL=https://yddzfmwjijevnjyukogy.supabase.co
+EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
 ```
 

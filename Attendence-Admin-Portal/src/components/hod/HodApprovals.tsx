@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, Clock, Users, Calendar, User, MessageSquare } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPendingApprovals, reviewApproval, getSessionAttendance, toggleAttendanceStatus } from '../../lib/attendanceService';
+import { getPendingApprovals, reviewApproval, getSessionAttendance } from '../../lib/attendanceService';
 
 interface Approval {
   id: string;
@@ -101,20 +101,7 @@ export default function HodApprovals() {
     }
   }
 
-  async function handleToggleStatus(attendanceId: string, currentStatus: string) {
-    const newStatus = currentStatus === 'PRESENT' ? 'ABSENT' : 'PRESENT';
-    
-    try {
-      await toggleAttendanceStatus(attendanceId, newStatus);
-      // Refresh attendance list
-      if (selectedApproval) {
-        await fetchSessionAttendance(selectedApproval.session_id);
-      }
-    } catch (err: any) {
-      console.error('Failed to toggle status:', err);
-      setError(err.message || 'Failed to update attendance status');
-    }
-  }
+  // HOD view is read-only; toggling attendance is disabled by RLS
 
   async function handleReject() {
     if (!selectedApproval || !user) return;
@@ -144,7 +131,6 @@ export default function HodApprovals() {
   }
 
   const presentCount = attendance.filter(a => (a.status || 'PRESENT') === 'PRESENT').length;
-  const absentCount = attendance.filter(a => a.status === 'ABSENT').length;
   const totalCount = attendance.length;
 
   return (
@@ -196,7 +182,7 @@ export default function HodApprovals() {
                     <div className="text-sm text-gray-600 space-y-1">
                       <div className="flex items-center gap-1">
                         <User className="w-3 h-3" />
-                        {approval.sessions.classes.instructor_name}
+                        {approval.sessions.classes.instructor_name || 'N/A'}
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
@@ -229,7 +215,7 @@ export default function HodApprovals() {
                   </div>
                   <div>
                     <span className="text-gray-600">Faculty:</span>
-                    <span className="ml-2 font-medium">{selectedApproval.sessions.classes.instructor_name}</span>
+                    <span className="ml-2 font-medium">{selectedApproval.sessions.classes.instructor_name || 'N/A'}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Date:</span>
@@ -251,11 +237,7 @@ export default function HodApprovals() {
                     <span className="text-sm text-gray-600">Present:</span>
                     <span className="font-bold text-green-600">{presentCount}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <XCircle className="w-5 h-5 text-red-600" />
-                    <span className="text-sm text-gray-600">Absent:</span>
-                    <span className="font-bold text-red-600">{absentCount}</span>
-                  </div>
+                  {/* Absentees are not stored; HOD sees only present count */}
                   <div className="flex items-center gap-2">
                     <Users className="w-5 h-5 text-gray-600" />
                     <span className="text-sm text-gray-600">Total:</span>
@@ -294,15 +276,9 @@ export default function HodApprovals() {
                                 {record.students?.name || 'Unknown'}
                               </td>
                               <td className="px-4 py-3">
-                                <button
-                                  onClick={() => handleToggleStatus(record.id, status)}
-                                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-colors ${
-                                    isPresent
-                                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                      : 'bg-red-100 text-red-700 hover:bg-red-200'
-                                  }`}
-                                  title="Click to toggle status"
-                                >
+                                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
+                                  isPresent ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                }`}>
                                   {isPresent ? (
                                     <>
                                       <CheckCircle className="w-3 h-3" />
@@ -310,11 +286,11 @@ export default function HodApprovals() {
                                     </>
                                   ) : (
                                     <>
-                                      <XCircle className="w-3 h-3" />
-                                      Absent
+                                      <Clock className="w-3 h-3" />
+                                      Not Marked
                                     </>
                                   )}
-                                </button>
+                                </span>
                               </td>
                               <td className="px-4 py-3 text-gray-600 text-xs">
                                 {new Date(record.marked_at).toLocaleTimeString()}

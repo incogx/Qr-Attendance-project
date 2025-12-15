@@ -72,19 +72,33 @@ export default function AttendancePage() {
       setLoading(true);
       setError(null);
       try {
+        // Find class first, then get sessions for that class
+        const { data: classes } = await supabase
+          .from('classes')
+          .select('id, class_no')
+          .limit(10);
+        
+        if (!classes || classes.length === 0) {
+          setReports([]);
+          setLoading(false);
+          return;
+        }
+        
+        const classIds = classes.map(c => c.id);
         const { data, error } = await supabase
-          .from('attendance_sessions')
-          .select('*')
-          .eq('faculty_id', profile?.id || user?.id)
-          .order('started_at', { ascending: false })
+          .from('sessions')
+          .select('*, classes(class_no)')
+          .in('class_id', classIds)
+          .eq('created_by', profile?.id || user?.id)
+          .order('created_at', { ascending: false })
           .limit(10);
 
         if (error) throw error;
         
         const mapped: AttendanceReportLocal[] = (data || []).map((s: any) => ({
           id: s.id,
-          classId: s.class_no,
-          className: s.class_no,
+          classId: s.classes?.class_no || s.class_id,
+          className: s.classes?.class_no || 'Unknown',
           date: s.session_date,
           notes: `Status: ${s.status}`,
           students: [],
@@ -123,16 +137,27 @@ export default function AttendancePage() {
     setError(null);
 
     try {
-      // Create real attendance session
+      // Find class by class_no
+      const { data: classData, error: classError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('class_no', selectedClassId)
+        .maybeSingle();
+
+      if (classError || !classData) {
+        throw new Error(`Class ${selectedClassId} not found`);
+      }
+
+      // Create session (actual attendance is created when QR is scanned)
+      const qrPayload = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const { data, error } = await supabase
-        .from('attendance_sessions')
+        .from('sessions')
         .insert([{
-          class_no: selectedClassId,
-          faculty_id: profile?.id || user.id,
-          faculty_name: profile?.full_name || user?.email || 'Unknown',
-          department: profile?.department || 'N/A',
+          class_id: classData.id,
+          qr_payload: qrPayload,
           session_date: selectedDate,
           status: 'ACTIVE',
+          created_by: profile?.id || user.id,
         }])
         .select()
         .single();
@@ -141,8 +166,8 @@ export default function AttendancePage() {
 
       const newReport: AttendanceReportLocal = {
         id: data.id,
-        classId: data.class_no,
-        className: data.class_no,
+        classId: selectedClassId,
+        className: selectedClassId,
         date: data.session_date,
         notes: `Status: ${data.status}`,
         students: [],

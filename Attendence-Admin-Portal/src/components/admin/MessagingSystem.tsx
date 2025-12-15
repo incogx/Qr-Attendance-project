@@ -40,7 +40,7 @@ async function getAbsentStudents(): Promise<{ id: string; name: string; reg_numb
     const sessionIds = approvals.map((a: any) => a.session_id);
     
     const { data: absentAttendance, error: attendanceError } = await supabase
-      .from('attendance')
+      .from('attendance_marks')
       .select(`
         student_id,
         session_id,

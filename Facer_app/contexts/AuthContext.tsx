@@ -1,260 +1,190 @@
-// contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Session } from "@supabase/supabase-js";
-import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
+import { Session, User } from "@supabase/supabase-js";
 
 type Student = {
   id: string;
-  name: string;
   reg_number: string;
-  email?: string;
-  phone?: string;
-  department?: string;
-  class_no?: string;
-  section?: string;
-  face_encoding?: string | null;
+  name: string;
+  class_no: string | null;
+  department: string | null;
+  face_encoding: string | null;
 };
 
-interface AuthContextType {
-  student: Student | null;
+type AuthContextType = {
   session: Session | null;
+  user: User | null;
+  student: Student | null;
   loading: boolean;
-  authLoading: boolean;
   signIn: (reg: string, password: string) => Promise<void>;
-  signUp: (
-    regNumber: string,
-    password: string,
-    name: string,
-    email: string,
-    phone: string,
-    department: string,
-    classNumber: string,
-    section: string
-  ) => Promise<void>;
+  signUp: (data: {
+    regNumber: string;
+    password: string;
+    name: string;
+    phone: string;
+    department: string;
+    classNo: string;
+    section: string;
+  }) => Promise<void>;
   signOut: () => Promise<void>;
-  refreshStudent: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType>({
-  student: null,
-  session: null,
-  loading: false,
-  authLoading: true,
-  signIn: async () => {},
-  signUp: async () => {},
-  signOut: async () => {},
-  refreshStudent: async () => {},
-});
-
-export const useAuth = () => useContext(AuthContext);
-
-// Helper to get/set from SecureStore (native) or localStorage (web)
-const storage = {
-  async getItem(key: string): Promise<string | null> {
-    if (Platform.OS === "web") {
-      try {
-        return localStorage.getItem(key);
-      } catch {
-        return null;
-      }
-    }
-    return SecureStore.getItemAsync(key);
-  },
-  async setItem(key: string, value: string): Promise<void> {
-    if (Platform.OS === "web") {
-      localStorage.setItem(key, value);
-      return;
-    }
-    return SecureStore.setItemAsync(key, value);
-  },
-  async removeItem(key: string): Promise<void> {
-    if (Platform.OS === "web") {
-      localStorage.removeItem(key);
-      return;
-    }
-    return SecureStore.deleteItemAsync(key);
-  },
 };
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [student, setStudent] = useState<Student | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-  // Initialize: Check for existing session
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [student, setStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // ---------- INIT ----------
   useEffect(() => {
-    // Check if student is stored locally
-    storage.getItem("student").then((studentData) => {
-      if (studentData) {
-        try {
-          const parsed = JSON.parse(studentData);
-          setStudent(parsed);
-          // Create mock session
-          const mockSession = { user: { id: parsed.id } } as any;
-          setSession(mockSession);
-        } catch (error) {
-          console.error("Error parsing stored student:", error);
-        }
-      }
-      setAuthLoading(false);
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
+      setLoading(false);
+    };
+
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Refresh student profile manually
-  const refreshStudent = async () => {
-    if (student?.id) {
-      try {
-        const { data, error } = await supabase
-          .from("students")
-          .select("*")
-          .eq("id", student.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error("Error refreshing student profile:", error);
-          return;
-        }
-
-        if (data) {
-          setStudent(data);
-          await storage.setItem("student", JSON.stringify(data));
-        }
-      } catch (error) {
-        console.error("Error in refreshStudent:", error);
+  // ---------- FETCH STUDENT ----------
+  useEffect(() => {
+    const fetchStudent = async () => {
+      if (!session?.user) {
+        setStudent(null);
+        setLoading(false);
+        return;
       }
-    }
-  };
 
-  // Sign in with registration number and password
-  const signIn = async (reg: string, password: string) => {
-    setLoading(true);
-    try {
-      // Find student by registration number and verify password
-      const { data: studentData, error: studentError } = await supabase
+      setLoading(true);
+
+      const { data, error } = await supabase
         .from("students")
         .select("*")
-        .eq("reg_number", reg.trim())
+        .eq("id", session.user.id)
         .maybeSingle();
 
-      if (studentError) throw studentError;
-      if (!studentData) {
-        throw new Error("Registration number not found");
+      if (error) {
+        console.error("Fetch student error:", error.message);
+        setStudent(null);
+      } else {
+        setStudent(data ?? null);
       }
 
-      // Verify password (stored as plain text in database for this simple implementation)
-      if ((studentData as any).password !== password) {
-        throw new Error("Incorrect password");
-      }
-
-      // Set student and create a mock session
-      setStudent(studentData as Student);
-      await storage.setItem("student", JSON.stringify(studentData));
-      await storage.setItem("regNumber", reg.trim());
-      
-      // Create a mock session object for compatibility
-      const mockSession = {
-        user: { id: (studentData as any).id }
-      } as any;
-      setSession(mockSession);
-    } finally {
       setLoading(false);
-    }
+    };
+
+    fetchStudent();
+  }, [session]);
+
+  // ---------- SIGN IN ----------
+  const signIn = async (reg: string, password: string) => {
+    const email = `${reg}@attendance.app`;
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) throw error;
   };
 
-  // Sign up new user
-  const signUp = async (
-    regNumber: string,
-    password: string,
-    name: string,
-    email: string,
-    phone: string,
-    department: string,
-    classNumber: string,
-    section: string
-  ) => {
-    setLoading(true);
-    try {
-      // Check if registration number already exists
-      const { data: existingStudent } = await supabase
-        .from("students")
-        .select("id")
-        .eq("reg_number", regNumber.trim())
-        .maybeSingle();
+  // ---------- SIGN UP ----------
+  const signUp = async (data: {
+    regNumber: string;
+    password: string;
+    name: string;
+    phone: string;
+    department: string;
+    classNo: string;
+    section: string;
+  }) => {
+    console.log("🔵 Starting signup...");
+    
+    const { data: responseData, error } = await supabase.functions.invoke("student-signup", {
+      body: {
+        reg_number: data.regNumber,
+        password: data.password,
+        full_name: data.name,
+        phone: data.phone,
+        department: data.department,
+        class_no: data.classNo,
+        section: data.section,
+      },
+    });
 
-      if (existingStudent) {
-        throw new Error("Registration number already exists. Please log in instead.");
-      }
+    console.log("🔴 Response:", { responseData, error });
 
-      // Create student with password stored in database
-      const { data: studentData, error: studentError } = await supabase
-        .from("students")
-        .insert({
-          reg_number: regNumber.trim(),
-          password: password,
-          name: name.trim(),
-          email: email?.trim().toLowerCase() || null,
-          phone: phone?.trim() || null,
-          department: department || null,
-          class_no: classNumber?.trim() || null,
-          section: section?.trim() || null,
-        } as any)
-        .select()
-        .single();
-
-      if (studentError) {
-        console.error("Signup error:", studentError);
-        throw studentError;
-      }
-
-      if (!studentData) {
-        throw new Error("Failed to create student account");
-      }
-
-      // Set student immediately
-      setStudent(studentData as Student);
-      await storage.setItem("student", JSON.stringify(studentData));
-      // Create mock session
-      const mockSession = { user: { id: (studentData as any).id } } as any;
-      setSession(mockSession);
-      console.log('Signup success - Student created:', (studentData as any).name, 'Face encoding:', (studentData as any).face_encoding);
-    } finally {
-      setLoading(false);
+    // Handle fetch-level errors (network, timeout, etc.)
+    if (error) {
+      console.log("🔴 Network error:", error);
+      throw new Error(error.message || "Network error occurred");
     }
+
+    // Handle application-level errors from backend
+    if (responseData?.error) {
+      console.log("🔴 Backend error:", responseData.error);
+      throw new Error(responseData.error);
+    }
+
+    // Success - responseData.success should be true
+    if (!responseData?.success) {
+      console.log("🔴 Signup validation failed");
+      throw new Error("Signup failed. Please try again.");
+    }
+    
+    console.log("✅ Signup successful! Auto-logging in...");
+
+    // Auto-login after successful signup
+    const email = `${data.regNumber}@attendance.app`;
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: data.password,
+    });
+
+    if (signInError) {
+      throw new Error("Signup successful but login failed. Please login manually.");
+    }
+
+    console.log("✅ Auto-login successful!");
   };
 
-  // Sign out
+  // ---------- SIGN OUT ----------
   const signOut = async () => {
     setLoading(true);
-    try {
-      setStudent(null);
-      setSession(null);
-      await storage.removeItem("student");
-      await storage.removeItem("regNumber");
-    } catch (error) {
-      console.error("Error signing out:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+    await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    setStudent(null);
+    setLoading(false);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        student,
         session,
+        user,
+        student,
         loading,
-        authLoading,
         signIn,
         signUp,
         signOut,
-        refreshStudent,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
-}
+};
+
+export const useAuth = () => useContext(AuthContext);

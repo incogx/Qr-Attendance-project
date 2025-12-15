@@ -2,12 +2,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { QrCode } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
 
 /**
  * FacultyDashboard.tsx
  *
- * - Single-file component with small internal helper components and a mocked "real-time" data source.
- * - Replace mocked API functions (fetchTodayTimetable(), fetchAttendanceSnapshot()) with real API / supabase calls.
+ * Fetches faculty's classes and attendance data from the new database schema.
+ * Uses real Supabase queries for:
+ * - classes (via class_faculty junction table)
+ * - attendance marks (via sessions)
+ * - 7-day history for each class
  *
  * TailwindCSS classes are used to match your admin styles.
  */
@@ -15,15 +20,13 @@ import { v4 as uuidv4 } from "uuid";
 /* ----------------------------- Types ------------------------------ */
 type ClassItem = {
   id: string;
-  courseCode: string;
-  courseTitle: string;
-  start: string; // ISO time or HH:MM
-  end: string;
-  room?: string;
+  class_no: string;
+  department?: string;
 };
 
 type AttendanceSnapshot = {
   classId: string;
+  className: string;
   present: number;
   absent: number;
   total: number;
@@ -31,105 +34,110 @@ type AttendanceSnapshot = {
   history: { date: string; present: number; absent: number }[];
 };
 
-/* ------------------------- MOCKED DATA / API ---------------------- */
-/**
- * NOTE:
- * Replace these mocks with real API calls. Keep function signatures the same.
- */
+/* ----------------------- REAL DATABASE API ---------------------- */
 
-function mockTodayTimetable(): ClassItem[] {
-  // Example timetable - scheduled in local time strings (24h)
-  const todayBase = new Date();
-  return [
-    {
-      id: "c1",
-      courseCode: "CS201",
-      courseTitle: "Data Structures",
-      start: "09:00",
-      end: "09:50",
-      room: "Lab 3",
-    },
-    {
-      id: "c2",
-      courseCode: "CS301",
-      courseTitle: "Operating Systems",
-      start: "10:30",
-      end: "11:20",
-      room: "Room 102",
-    },
-    {
-      id: "c3",
-      courseCode: "CS401",
-      courseTitle: "AI & Robotics",
-      start: "13:00",
-      end: "14:00",
-      room: "Room 204",
-    },
-  ];
+/** Get faculty's assigned classes from class_faculty table */
+async function fetchFacultyClasses(facultyId: string): Promise<ClassItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from("class_faculty")
+      .select("class_id, classes(id, class_no, department)")
+      .eq("faculty_id", facultyId);
+
+    if (error) {
+      console.error("Error fetching classes:", error);
+      return [];
+    }
+
+    return (data || [])
+      .map((item: any) => ({
+        id: item.classes?.id || "",
+        class_no: item.classes?.class_no || "",
+        department: item.classes?.department,
+      }))
+      .filter((cls) => cls.id);
+  } catch (err) {
+    console.error("Error in fetchFacultyClasses:", err);
+    return [];
+  }
 }
 
-/** Create a plausible attendance snapshot for each class (mock) */
-function mockAttendanceSnapshot(classes: ClassItem[]): AttendanceSnapshot[] {
-  return classes.map((c) => {
-    // random totals but deterministic-ish
-    const seed = c.id.charCodeAt(1) + c.id.length;
-    const total = 30 + (seed % 10);
-    const present = Math.floor(total * (0.7 + ((seed % 5) * 0.05)));
-    const absent = total - present;
-    const history = Array.from({ length: 7 }).map((_, i) => {
-      const dayPresent = Math.max(0, present - (i % 3));
-      const dayAbsent = Math.max(0, total - dayPresent);
-      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      return { date, present: dayPresent, absent: dayAbsent };
-    });
-    return { classId: c.id, present, absent, total, history };
-  });
-}
-
-/* Simulated API: returns today's timetable */
-async function fetchTodayTimetable(): Promise<ClassItem[]> {
-  // simulate network latency
-  await new Promise((r) => setTimeout(r, 200));
-  return mockTodayTimetable();
-}
-
-/* Simulated API: returns attendance snapshot (polling) */
+/** Get attendance snapshot for classes (today's data + last 7 days) */
 async function fetchAttendanceSnapshot(classes: ClassItem[]): Promise<AttendanceSnapshot[]> {
-  await new Promise((r) => setTimeout(r, 200));
-  // occasionally vary present/absent to simulate live changes
-  const base = mockAttendanceSnapshot(classes);
-  // small random fluctuation
-  return base.map((s) => {
-    const rnd = Math.random() > 0.6 ? -1 : Math.random() > 0.6 ? 1 : 0;
-    const present = Math.max(0, Math.min(s.total, s.present + rnd));
-    const absent = s.total - present;
-    const history = s.history.slice();
-    // roll date - update today's history row
-    const today = new Date().toISOString().slice(0, 10);
-    history[0] = { date: today, present, absent };
-    return { ...s, present, absent, history };
-  });
+  if (!classes.length) return [];
+
+  try {
+    const classIds = classes.map((c) => c.id);
+
+    // Get today's attendance marks
+    const today = new Date().toISOString().split("T")[0];
+    const { data: todayData, error: todayError } = await supabase
+      .from("attendance_marks")
+      .select("class_id, status, student_id")
+      .in("class_id", classIds)
+      .eq("session_id", (await supabase.from("sessions").select("id").eq("session_date", today)).data?.[0]?.id || "");
+
+    if (todayError) console.error("Error fetching today's attendance:", todayError);
+
+    // Get 7-day history
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const { data: historyData, error: historyError } = await supabase
+      .from("attendance_marks")
+      .select("class_id, status, marked_at")
+      .in("class_id", classIds)
+      .gte("marked_at", sevenDaysAgo);
+
+    if (historyError) console.error("Error fetching history:", historyError);
+
+    // Get total students per class
+    const { data: studentData, error: studentError } = await supabase
+      .from("students")
+      .select("class_id, id")
+      .in("class_id", classIds);
+
+    if (studentError) console.error("Error fetching students:", studentError);
+
+    // Process data
+    return classes.map((cls) => {
+      const classStudents = (studentData || []).filter((s: any) => s.class_id === cls.id);
+      const total = classStudents.length;
+
+      const todayAttendance = (todayData || []).filter((a: any) => a.class_id === cls.id);
+      const present = todayAttendance.filter((a: any) => a.status === "PRESENT").length;
+      const absent = todayAttendance.filter((a: any) => a.status === "ABSENT").length;
+
+      // Build 7-day history
+      const history: { date: string; present: number; absent: number }[] = [];
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const dayRecords = (historyData || []).filter(
+          (h: any) => h.class_id === cls.id && h.marked_at.startsWith(date)
+        );
+        const dayPresent = dayRecords.filter((r: any) => r.status === "PRESENT").length;
+        const dayAbsent = dayRecords.filter((r: any) => r.status === "ABSENT").length;
+        history.push({ date, present: dayPresent, absent: dayAbsent });
+      }
+
+      return {
+        classId: cls.id,
+        className: cls.class_no,
+        present,
+        absent,
+        total,
+        history,
+      };
+    });
+  } catch (err) {
+    console.error("Error in fetchAttendanceSnapshot:", err);
+    return [];
+  }
 }
 
-/* -------------------------- Utility fns --------------------------- */
-function nowHHMM(): string {
-  const n = new Date();
-  const hh = n.getHours().toString().padStart(2, "0");
-  const mm = n.getMinutes().toString().padStart(2, "0");
-  return `${hh}:${mm}`;
+/* Poll attendance snapshot (real data refresh) */
+async function fetchAttendanceSnapshotPolled(classes: ClassItem[]): Promise<AttendanceSnapshot[]> {
+  return fetchAttendanceSnapshot(classes);
 }
 
-function isTimeBetween(time: string, start: string, end: string) {
-  // time in "HH:MM"
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(":").map((s) => parseInt(s, 10));
-    return h * 60 + m;
-  };
-  const t = toMinutes(time);
-  return toMinutes(start) <= t && t < toMinutes(end);
-}
 
 /* ------------------------ Small Components ------------------------ */
 
@@ -155,29 +163,34 @@ function Sparkline({ data }: { data: number[] }) {
 /* ---------------------- MAIN FACULTY DASHBOARD -------------------- */
 
 export default function FacultyDashboard() {
+  const { user } = useAuth();
   const [timetable, setTimetable] = useState<ClassItem[]>([]);
   const [attendance, setAttendance] = useState<AttendanceSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveQrToken, setLiveQrToken] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState(5000); // ms
 
-  // on mount: load timetable + attendance
+  // on mount: load faculty's classes + attendance
   useEffect(() => {
     let mounted = true;
+    if (!user) return;
+
     setLoading(true);
     (async () => {
-      const tt = await fetchTodayTimetable();
+      const classes = await fetchFacultyClasses(user.id);
       if (!mounted) return;
-      setTimetable(tt);
-      const snap = await fetchAttendanceSnapshot(tt);
+      setTimetable(classes);
+
+      const snap = await fetchAttendanceSnapshot(classes);
       if (!mounted) return;
       setAttendance(snap);
       setLoading(false);
     })();
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [user]);
 
   // poll attendance snapshot every pollInterval ms to simulate realtime
   useEffect(() => {
@@ -185,7 +198,7 @@ export default function FacultyDashboard() {
     let alive = true;
     const interval = setInterval(async () => {
       if (!alive) return;
-      const snap = await fetchAttendanceSnapshot(timetable);
+      const snap = await fetchAttendanceSnapshotPolled(timetable);
       setAttendance(snap);
     }, pollInterval);
     return () => {
@@ -208,8 +221,6 @@ export default function FacultyDashboard() {
     };
   }, [liveQrToken]);
 
-  const now = nowHHMM();
-
   // quick summary totals
   const totals = useMemo(() => {
     const totalStudents = attendance.reduce((s, a) => s + a.total, 0);
@@ -225,10 +236,6 @@ export default function FacultyDashboard() {
     const token = `${classId}::${uuidv4()}`;
     setLiveQrToken(token);
     // In real app emit token to DB so scanners can validate
-  }
-
-  function stopLiveQr() {
-    setLiveQrToken(null);
   }
 
   function exportClassCSV(classId: string) {
@@ -251,7 +258,7 @@ export default function FacultyDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Faculty Dashboard</h1>
-          <div className="text-sm text-slate-500 mt-1">Today's timetable and real-time attendance overview</div>
+          <div className="text-sm text-slate-500 mt-1">Your classes and real-time attendance overview</div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -282,51 +289,53 @@ export default function FacultyDashboard() {
           </div>
         </Card>
 
-        
+        <Card>
+          <div className="text-sm text-slate-500">Total Classes</div>
+          <div className="text-2xl font-semibold mt-2">{timetable.length}</div>
+          <div className="text-sm text-slate-400 mt-2">Classes assigned to you</div>
+        </Card>
 
         <Card>
-          <div className="text-sm text-slate-500">Current Time</div>
-          <div className="text-2xl font-semibold mt-2">{now}</div>
-          <div className="text-sm text-slate-400 mt-2">Auto-detects the ongoing class in the timetable</div>
+          <div className="text-sm text-slate-500">Attendance Rate</div>
+          <div className="text-2xl font-semibold mt-2">
+            {totals.totalStudents > 0 ? ((totals.totalPresent / totals.totalStudents) * 100).toFixed(1) : 0}%
+          </div>
+          <div className="text-sm text-slate-400 mt-2">Average across all classes</div>
         </Card>
       </div>
 
-      {/* Main grid: Timetable (left) + Attendance table (right) */}
+      {/* Main grid: Classes (left) + Attendance table (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Timetable */}
+        {/* Classes List */}
         <div className="lg:col-span-1">
           <Card>
             <div className="flex items-center justify-between">
-              <div className="text-lg font-medium">Today's Timetable</div>
+              <div className="text-lg font-medium">Your Classes</div>
               <div className="text-sm text-slate-400">Live</div>
             </div>
 
             <div className="mt-4 space-y-3">
               {loading ? (
-                <div className="py-6 text-center text-sm text-slate-500">Loading timetable…</div>
+                <div className="py-6 text-center text-sm text-slate-500">Loading classes…</div>
               ) : timetable.length === 0 ? (
-                <div className="py-6 text-center text-sm text-slate-500">No classes today</div>
+                <div className="py-6 text-center text-sm text-slate-500">No classes assigned</div>
               ) : (
                 timetable.map((cls) => {
-                  const ongoing = isTimeBetween(now, cls.start, cls.end);
-                  const upcoming = cls.start > now;
+                  const classAttendance = attendance.find((a) => a.classId === cls.id);
                   return (
                     <div
                       key={cls.id}
-                      className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
-                        ongoing ? "border-green-200 bg-green-50" : "border-transparent"
-                      }`}
+                      className="flex items-center justify-between gap-3 p-3 rounded-lg border border-transparent hover:border-slate-200 transition"
                     >
                       <div>
-                        <div className="text-sm font-medium">
-                          {cls.courseCode} • {cls.courseTitle}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {cls.start} - {cls.end} • {cls.room}
-                        </div>
-                        <div className="mt-2 text-xs">
-                          {ongoing ? <span className="text-green-600 font-medium">Ongoing</span> : upcoming ? <span className="text-slate-500">Upcoming</span> : <span className="text-slate-400">Completed</span>}
-                        </div>
+                        <div className="text-sm font-medium">{cls.class_no}</div>
+                        <div className="text-xs text-slate-500 mt-1">{cls.department || "No dept"}</div>
+                        {classAttendance && (
+                          <div className="mt-2 text-xs">
+                            <span className="text-green-600 font-medium">{classAttendance.present}</span> present •{" "}
+                            <span className="text-red-600 font-medium">{classAttendance.absent}</span> absent
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col items-end gap-2">
@@ -357,7 +366,7 @@ export default function FacultyDashboard() {
           <Card>
             <div className="flex items-center justify-between">
               <div className="text-lg font-medium">Class-wise Attendance</div>
-              <div className="text-sm text-slate-500">Updated in simulated realtime</div>
+              <div className="text-sm text-slate-500">Real-time data</div>
             </div>
 
             <div className="mt-4 overflow-x-auto">
@@ -380,8 +389,8 @@ export default function FacultyDashboard() {
                     return (
                       <tr key={row.classId} className="odd:bg-white even:bg-slate-50">
                         <td className="py-3 px-3">
-                          <div className="font-medium">{cls?.courseCode ?? row.classId}</div>
-                          <div className="text-xs text-slate-500">{cls?.courseTitle}</div>
+                          <div className="font-medium">{cls?.class_no ?? row.classId}</div>
+                          <div className="text-xs text-slate-500">{row.className}</div>
                         </td>
 
                         <td className="py-3 px-3">

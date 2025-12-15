@@ -3,48 +3,60 @@
 
 CREATE TABLE public.approvals (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  session_id uuid NOT NULL,
+  session_id uuid,
   submitted_by uuid,
   submitted_at timestamp with time zone DEFAULT now(),
-  status text DEFAULT 'PENDING'::text CHECK (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'REJECTED'::text])),
   reviewed_by uuid,
   reviewed_at timestamp with time zone,
+  status text DEFAULT 'PENDING'::text CHECK (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'REJECTED'::text])),
   comments text,
-  created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT approvals_pkey PRIMARY KEY (id),
   CONSTRAINT approvals_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id),
   CONSTRAINT approvals_submitted_by_fkey FOREIGN KEY (submitted_by) REFERENCES public.profiles(id),
   CONSTRAINT approvals_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id)
 );
-CREATE TABLE public.attendance (
+CREATE TABLE public.attendance_marks (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  student_id uuid NOT NULL,
+  student_id uuid,
   class_id uuid,
   session_id uuid,
-  marked_at timestamp with time zone DEFAULT now(),
-  created_at timestamp with time zone DEFAULT now(),
   status text DEFAULT 'PRESENT'::text CHECK (status = ANY (ARRAY['PRESENT'::text, 'ABSENT'::text])),
-  CONSTRAINT attendance_pkey PRIMARY KEY (id),
-  CONSTRAINT attendance_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
-  CONSTRAINT attendance_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
-  CONSTRAINT attendance_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id)
+  marked_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT attendance_marks_pkey PRIMARY KEY (id),
+  CONSTRAINT attendance_marks_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT attendance_marks_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT attendance_marks_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id)
+);
+CREATE TABLE public.class_faculty (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid,
+  faculty_id uuid,
+  CONSTRAINT class_faculty_pkey PRIMARY KEY (id),
+  CONSTRAINT class_faculty_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT class_faculty_faculty_id_fkey FOREIGN KEY (faculty_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.classes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  class_no text,
-  faculty_id uuid,
+  class_no text NOT NULL UNIQUE,
   department text,
-  name text,
-  code text,
-  instructor_name text,
+  created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT classes_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  title text,
+  message text,
+  created_at timestamp with time zone DEFAULT now(),
+  read boolean DEFAULT false,
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL,
-  email text UNIQUE,
   full_name text,
-  role text,
+  email text UNIQUE,
+  role text CHECK (role = ANY (ARRAY['ADMIN'::text, 'HOD'::text, 'FACULTY'::text, 'STUDENT'::text])),
   department text,
   phone text,
   created_at timestamp with time zone DEFAULT now(),
@@ -55,27 +67,36 @@ CREATE TABLE public.sessions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   class_id uuid,
   qr_payload text NOT NULL,
+  status text DEFAULT 'ACTIVE'::text CHECK (status = ANY (ARRAY['ACTIVE'::text, 'SUBMITTED'::text, 'APPROVED'::text, 'REJECTED'::text])),
   session_date date DEFAULT CURRENT_DATE,
-  start_time time without time zone,
-  end_time time without time zone,
+  start_time timestamp with time zone DEFAULT now(),
+  end_time timestamp with time zone,
   expires_at timestamp with time zone,
-  status text DEFAULT 'ACTIVE'::text,
+  created_by uuid,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT sessions_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+  CONSTRAINT sessions_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.students (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  email text UNIQUE,
+  reg_number text NOT NULL UNIQUE,
   name text,
-  reg_number text UNIQUE,
-  roll_number text UNIQUE,
+  email text,
   phone text,
   department text,
   class_no text,
+  class_id uuid,
   section text,
-  face_encoding text,
   created_at timestamp with time zone DEFAULT now(),
-  password text DEFAULT ''::text,
-  CONSTRAINT students_pkey PRIMARY KEY (id)
+  roll_number text,
+  CONSTRAINT students_pkey PRIMARY KEY (id),
+  CONSTRAINT students_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT students_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.system_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_signup_enabled boolean DEFAULT false,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT system_settings_pkey PRIMARY KEY (id)
 );

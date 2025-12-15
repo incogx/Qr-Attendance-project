@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const emblemAnim = useRef(new Animated.Value(0)).current;
   const buttonsAnim = useRef(new Animated.Value(0)).current;
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
     Animated.sequence([
@@ -51,15 +52,14 @@ export default function WelcomeScreen() {
 
   // Handle redirect if already authenticated
   useEffect(() => {
-    if (!authLoading && session) {
-      if (student) {
-        if (!student.face_encoding) {
-          router.replace('/face-capture');
-        } else {
-          router.replace('/(tabs)');
-        }
-      }
-    }
+    if (authLoading) return;
+    if (!session) return;
+    if (!student) return;
+    if (hasNavigated.current) return;
+
+    // Go directly to tabs (face verification removed)
+    hasNavigated.current = true;
+    router.replace('/(tabs)');
   }, [session, student, authLoading]);
 
   // Show loading while checking auth

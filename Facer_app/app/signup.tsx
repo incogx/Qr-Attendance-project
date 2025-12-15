@@ -1,5 +1,5 @@
 // app/signup.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -54,12 +54,16 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showDeptPicker, setShowDeptPicker] = useState(false);
+  const hasNavigated = useRef(false);
 
   // Redirect if already logged in
   useEffect(() => {
-    if (!authLoading && session) {
-      router.replace('/(tabs)');
-    }
+    if (authLoading) return;
+    if (!session) return;
+    if (hasNavigated.current) return;
+
+    hasNavigated.current = true;
+    router.replace('/(tabs)');
   }, [session, authLoading]);
 
   if (authLoading) {
@@ -80,48 +84,27 @@ export default function SignupScreen() {
 
   const validateInputs = () => {
     setError('');
-    const reg = (regNumber || '').trim();
-    const nm = (name || '').trim();
-    const ph = (phone || '').trim();
-    const cls = (classNumber || '').trim();
-    const sec = (section || '').trim();
+    const reg = regNumber.trim();
+    const nm = name.trim();
+    const ph = phone.trim();
+    const cls = classNumber.trim();
+    const sec = section.trim();
 
-    if (!reg) {
-      setError('Please enter your registration number');
-      return false;
-    }
-    if (!/^\d{4,12}$/.test(reg)) {
-      setError('Registration number should be numeric (4-12 digits)');
-      return false;
-    }
-    if (!nm || nm.length < 2) {
-      setError('Please enter your full name');
-      return false;
-    }
-    if (!ph || !/^\+?\d{7,15}$/.test(ph)) {
-      setError('Please enter a valid phone number (with country code if needed)');
-      return false;
-    }
-    if (!department || department.length < 1) {
-      setError('Please select your department');
-      return false;
-    }
-    if (!cls) {
-      setError('Please enter your class number');
-      return false;
-    }
-    if (!sec) {
-      setError('Please enter your section');
-      return false;
-    }
-    if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return false;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return false;
-    }
+  if (!reg) return setError('Please enter your registration number'), false;
+    if (!/^\d{4,12}$/.test(reg))
+      return setError('Registration number should be numeric (4-12 digits)'), false;
+    if (!nm || nm.length < 2)
+      return setError('Please enter your full name'), false;
+    if (!ph || !/^\+?\d{7,15}$/.test(ph))
+      return setError('Please enter a valid phone number'), false;
+    if (!department) return setError('Please select your department'), false;
+    if (!cls) return setError('Please enter your class number'), false;
+    if (!sec) return setError('Please enter your section'), false;
+    if (!password || password.length < 6)
+      return setError('Password must be at least 6 characters'), false;
+    if (password !== confirmPassword)
+      return setError('Passwords do not match'), false;
+
     return true;
   };
 
@@ -131,23 +114,21 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      await signUp(
-        regNumber.trim(),
+      await signUp({
+        regNumber: regNumber.trim(),
         password,
-        name.trim(),
-        '', // email - not required anymore
-        phone.trim(),
+        name: name.trim(),
+        phone: phone.trim(),
         department,
-        classNumber.trim(),
-        section.trim()
-      );
+        classNo: classNumber.trim(),
+        section: section.trim(),
+      });
 
-      // success -> go to face enrollment
-      router.replace('/face-capture');
+      // success -> go directly to tabs (face verification removed)
+      router.replace('/(tabs)');
     } catch (err: any) {
-      // show friendly message
-      const msg = err?.message || err?.error || 'Sign up failed. Please try again.';
-      setError(msg);
+      setError(err?.message || 'Sign up failed. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -530,7 +511,7 @@ export default function SignupScreen() {
               {/* Info Text */}
               <View style={{ marginTop: 16, alignItems: 'center' }}>
                 <Text style={{ color: BRAND.muted, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
-                  After creating your account, you'll need to capture your face for attendance verification.
+                  After creating your account, you can start scanning QR codes to mark attendance.
                 </Text>
               </View>
             </View>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -41,23 +41,28 @@ export default function DashboardScreen() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (!session) {
+    if (authLoading) return;
+    
+    if (!session) {
+      if (!hasNavigated.current) {
+        hasNavigated.current = true;
         router.replace('/');
-        return;
       }
-      // If we have a session but no student after loading, there might be an issue
-      // Still try to load data if student exists
-      if (student) {
-        loadDashboardData();
-      } else if (session.user) {
-        // Session exists but student profile not loaded yet
-        // This might happen if student record doesn't exist in database
-        // Set loading to false so we can show an error
-        setLoading(false);
-      }
+      return;
+    }
+    
+    // If we have a session but no student after loading, there might be an issue
+    // Still try to load data if student exists
+    if (student) {
+      loadDashboardData();
+    } else if (session.user) {
+      // Session exists but student profile not loaded yet
+      // This might happen if student record doesn't exist in database
+      // Set loading to false so we can show an error
+      setLoading(false);
     }
   }, [student, authLoading, session]);
 
@@ -70,25 +75,27 @@ export default function DashboardScreen() {
     try {
       setLoading(true);
 
-      // Fetch attendance stats
+      // Fetch attendance stats from attendance_marks table
       const { data: attendanceData, error: attendanceError } = await supabase
-        .from('attendance')
-        .select('id')
-        .eq('student_id', student.id);
+        .from('attendance_marks')
+        .select('id, status')
+        .eq('student_id', student.id)
+        .eq('status', 'PRESENT');
 
       if (attendanceError) {
         console.error('Error fetching attendance:', attendanceError);
-        throw attendanceError;
+        // Don't throw - just show 0 stats
       }
 
-      // Fetch total sessions (simplified - showing all sessions)
+      // Fetch total sessions for student's class
       const { count: totalSessions, error: sessionsError } = await supabase
         .from('sessions')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('class_id', student.class_id || '');
 
       if (sessionsError) {
         console.error('Error fetching sessions:', sessionsError);
-        throw sessionsError;
+        // Don't throw - just show 0 stats
       }
 
       const attended = attendanceData?.length || 0;
@@ -101,17 +108,16 @@ export default function DashboardScreen() {
         percentage: Math.round(percentage),
       });
 
-      // Fetch recent attendance
+      // Fetch recent attendance with class info
       const { data: recentData, error: recentError } = await supabase
-        .from('attendance')
+        .from('attendance_marks')
         .select(
           `
           id,
           marked_at,
-          method,
+          status,
           classes (
-            name,
-            code
+            class_no
           )
         `
         )
@@ -128,9 +134,9 @@ export default function DashboardScreen() {
         recentData?.map((item: any) => ({
           id: item.id,
           marked_at: item.marked_at,
-          class_name: item.classes?.name || 'Unknown',
-          class_code: item.classes?.code || '',
-          method: item.method,
+          class_name: item.classes?.class_no || 'Unknown',
+          class_code: item.classes?.class_no || '',
+          method: item.status || 'PRESENT',
         })) || [];
 
       setRecentAttendance(formattedRecent);

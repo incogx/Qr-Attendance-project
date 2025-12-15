@@ -1,7 +1,7 @@
 // src/components/admin/DashboardPanel.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   ResponsiveContainer,
   LineChart,
@@ -80,6 +80,7 @@ export default function DashboardPanel() {
   const [trendLoading, setTrendLoading] = useState<boolean>(true);
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   const fetchCounts = useCallback(async () => {
     setLoading(true);
@@ -159,11 +160,11 @@ export default function DashboardPanel() {
     }
   }, []);
 
-  // initial load
+  // initial load and refresh when navigating to dashboard
   useEffect(() => {
     fetchCounts();
     fetchTrend(7);
-  }, [fetchCounts, fetchTrend]);
+  }, [fetchCounts, fetchTrend, location.pathname]); // Refresh when pathname changes (e.g., navigating back to dashboard)
 
   return (
     <section aria-labelledby="dashboard-heading" className="space-y-6">

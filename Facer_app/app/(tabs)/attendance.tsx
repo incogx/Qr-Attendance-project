@@ -55,12 +55,12 @@ export default function AttendanceScreen() {
       const endDate = new Date(selectedYear, selectedMonth + 1, 0).toISOString();
 
       const { data: attendanceRecords } = await supabase
-        .from('attendance')
+        .from('attendance_marks')
         .select(`
           marked_at,
+          status,
           classes (
-            name,
-            instructor_name
+            class_no
           ),
           sessions (
             start_time
@@ -90,10 +90,10 @@ export default function AttendanceScreen() {
 
           const dayRecord = groupedByDate.get(dateKey)!;
           dayRecord.classes.push({
-            subject: (record.classes as any)?.name || 'Unknown',
+            subject: (record.classes as any)?.class_no || 'Unknown',
             time: (record.sessions as any)?.start_time || 'N/A',
-            status: 'present',
-            faculty: (record.classes as any)?.instructor_name || 'Unknown',
+            status: record.status?.toLowerCase() || 'present',
+            faculty: 'Faculty',
           });
         });
       }

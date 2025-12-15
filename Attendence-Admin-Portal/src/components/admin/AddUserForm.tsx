@@ -1,6 +1,7 @@
 // src/components/admin/AddUserForm.tsx
 import React, { useState } from "react";
-import { createUser } from "../../lib/supabaseAdmin";
+import { supabase, supabaseUrl } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
 
 type Role = "HOD" | "FACULTY" | "ADMIN";
 
@@ -27,6 +28,7 @@ export default function AddUserForm({
   onCreated?: (profile?: any) => void;
   onCancel?: () => void;
 }) {
+  const { user } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(defaultRole);
@@ -75,18 +77,58 @@ export default function AddUserForm({
 
     setLoading(true);
     try {
-      // Build payload using the new createUser function
-      const profile = await createUser(
-        email.trim(),
-        fullName.trim(),
-        role as 'HOD' | 'FACULTY' | 'ADMIN',
-        autoGenerate ? undefined : password,
-        department.trim() || undefined,
-        phone.trim() || undefined
-      );
+      // Get current session for auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setServerError("Please log in again");
+        setLoading(false);
+        return;
+      }
+
+      // Generate password if auto-generate is enabled
+      const finalPassword = autoGenerate ? generatePassword(14) : password;
+      if (autoGenerate) {
+        setPassword(finalPassword);
+        setConfirmPassword(finalPassword);
+        setShowPassword(true);
+      }
+
+      // Call Supabase Edge Function
+      const EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/create-user`;
+      
+      const payload = {
+        email: email.trim(),
+        full_name: fullName.trim(),
+        role,
+        department: department.trim() || null,
+        phone: phone.trim() || null,
+        password: finalPassword,
+      };
+
+      const res = await fetch(EDGE_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setServerError(body?.error || body?.message || `Server returned ${res.status}`);
+        setLoading(false);
+        return;
+      }
+
+      const profile = body.profile || body.user || body;
 
       setSuccessMsg("User created successfully.");
-      if (onCreated) onCreated(profile);
+      // Call onCreated callback to refresh the user list
+      if (onCreated) {
+        onCreated(profile);
+      }
 
       // Clear form
       setFullName("");

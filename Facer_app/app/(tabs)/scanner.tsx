@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, QrCode, CheckCircle, Clock, MapPin, User } from 'lucide-react-native';
+import { X, QrCode, CheckCircle, Clock, MapPin, User, Fingerprint } from 'lucide-react-native';
 
 interface LastScan {
   subject: string;
@@ -30,6 +31,7 @@ export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const lastPromptRef = useRef<number>(0);
   const [lastScan, setLastScan] = useState<LastScan | null>(null);
   const [todayStats, setTodayStats] = useState({ attended: 0, remaining: 0 });
 
@@ -46,7 +48,7 @@ export default function ScannerScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const { data: attendanceData } = await supabase
-        .from('attendance')
+        .from('attendance_marks')
         .select('id')
         .eq('student_id', student.id)
         .gte('marked_at', `${today}T00:00:00`)
@@ -65,12 +67,11 @@ export default function ScannerScreen() {
 
     try {
       const { data: recentData } = await supabase
-        .from('attendance')
+        .from('attendance_marks')
         .select(`
           marked_at,
           classes (
-            name,
-            instructor_name
+            class_no
           ),
           sessions (
             start_time
@@ -84,8 +85,8 @@ export default function ScannerScreen() {
       if (recentData) {
         const markedAt = new Date(recentData.marked_at);
         setLastScan({
-          subject: (recentData.classes as any)?.name || 'Unknown Class',
-          faculty: (recentData.classes as any)?.instructor_name || 'Unknown',
+          subject: (recentData.classes as any)?.class_no || 'Unknown Class',
+          faculty: 'Faculty',
           room: 'Room TBD',
           time: markedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           date: markedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -148,19 +149,65 @@ export default function ScannerScreen() {
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (!scanning || processing) return;
 
+    // Debounce to avoid repeated prompts/crashes on rapid scans
+    const now = Date.now();
+    if (now - lastPromptRef.current < 2500) return;
+    lastPromptRef.current = now;
+
+    const resumeScanning = (delay = 600) => setTimeout(() => setScanning(true), delay);
+
     setScanning(false);
     setProcessing(true);
 
     try {
-      // Call Supabase Edge Function directly
+      // Biometric readiness checks
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!hasHardware || !isEnrolled) {
+        Alert.alert(
+          'Biometric Unavailable',
+          'Set up Face ID / fingerprint on this device to mark attendance.',
+        );
+        setProcessing(false);
+        resumeScanning();
+        return;
+      }
+
+      // Step 1: Authenticate with biometric (fingerprint/FaceID)
+      const biometricResult = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate to mark attendance',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: false,
+        fallbackLabel: 'Use passcode',
+      });
+
+      if (!biometricResult.success) {
+        if (biometricResult.error === 'user_cancel' || biometricResult.error === 'system_cancel') {
+          // Silent resume when user cancels
+          setProcessing(false);
+          resumeScanning();
+          return;
+        }
+        Alert.alert('Authentication Failed', 'Biometric authentication is required to mark attendance');
+        setProcessing(false);
+        resumeScanning();
+        return;
+      }
+
+      // Step 2: After successful biometric, mark attendance
       const EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/attendance-scan`;
       
+      // Get auth token for authenticated request
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('Error', 'Please log in again');
+        setProcessing(false);
+        resumeScanning();
+        return;
+      }
+
       const attendancePayload = {
-        reg_number: student?.reg_number || (student as any)?.roll_number || '',
-        name: student?.name || 'Unknown',
-        class_no: (student as any)?.class_no || (student as any)?.class || '',
-        qr_code_value: data?.trim() || '',
-        scanned_qr_data: data?.trim() || '',
+        qr_payload: data?.trim() || '',
       };
 
       console.log('Sending attendance payload:', attendancePayload);
@@ -170,7 +217,7 @@ export default function ScannerScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(attendancePayload),
       });
@@ -178,22 +225,22 @@ export default function ScannerScreen() {
       const result = await response.json();
       console.log('Response:', result);
 
-      if (result.success) {
+      if (response.ok && result.success) {
         Alert.alert('Success', result.message || 'Attendance marked successfully', [
           { text: 'OK', onPress: () => {
             loadTodayStats();
             loadLastScan();
-            setScanning(true);
+            resumeScanning();
           }}
         ]);
       } else {
-        Alert.alert('Error', result.message || 'Failed to mark attendance');
-        setScanning(true);
+        Alert.alert('Error', result.error || result.message || 'Failed to mark attendance');
+        resumeScanning();
       }
     } catch (error: any) {
       console.error('QR scan error:', error);
       Alert.alert('Error', `Failed to process QR code: ${error?.message || 'Unknown error'}`);
-      setScanning(true);
+      resumeScanning();
     } finally {
       setProcessing(false);
     }
@@ -450,7 +497,10 @@ export default function ScannerScreen() {
                   3. Wait for automatic detection
                 </Text>
                 <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>
-                  4. Attendance will be marked instantly
+                  4. Authenticate with fingerprint/FaceID
+                </Text>
+                <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>
+                  5. Attendance will be marked after authentication
                 </Text>
               </View>
             </View>

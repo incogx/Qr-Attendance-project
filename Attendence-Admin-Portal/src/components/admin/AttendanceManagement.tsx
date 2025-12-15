@@ -122,7 +122,7 @@ export default function AttendanceManagement() {
         const reportsWithStudents = await Promise.all(
           (approvals || []).map(async (approval: any) => {
             const { data: attendance, error: attError } = await supabase
-              .from('attendance')
+              .from('attendance_marks')
               .select(`
                 id,
                 student_id,
@@ -141,9 +141,9 @@ export default function AttendanceManagement() {
               id: approval.id,
               session_id: approval.session_id,
               class_no: approval.sessions.classes.class_no,
-              class_name: approval.sessions.classes.name,
-              instructor_name: approval.sessions.classes.instructor_name,
-              department: approval.sessions.classes.department,
+              class_name: approval.sessions.classes.class_no || 'N/A', // Use class_no as fallback since name doesn't exist
+              instructor_name: 'N/A', // instructor_name field doesn't exist in classes table
+              department: approval.sessions.classes.department || 'N/A',
               session_date: approval.sessions.session_date,
               reviewed_at: approval.reviewed_at,
               students: (attendance || []).map((att: any) => ({

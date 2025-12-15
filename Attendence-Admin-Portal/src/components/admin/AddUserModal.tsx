@@ -1,8 +1,7 @@
 // src/components/admin/AddUserModal.tsx
 import React, { useEffect, useState } from "react";
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string) || "http://localhost:4001/api";
-const ADMIN_SECRET = (import.meta.env.VITE_ADMIN_SECRET as string) || ""; // dev-only: optional admin header
+import { supabase, supabaseUrl } from "../../lib/supabase";
 
 function generatePassword(length = 14) {
   const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+={}[]<>?";
@@ -95,6 +94,14 @@ export default function AddUserModal({
 
     setLoading(true);
     try {
+      // Get current session for auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setErrorMsg("Please log in again");
+        setLoading(false);
+        return;
+      }
+
       const payload: any = {
         email: email.trim(),
         full_name: fullName.trim(),
@@ -104,12 +111,15 @@ export default function AddUserModal({
         password: pwToSend,
       };
 
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (ADMIN_SECRET) headers["x-admin-secret"] = ADMIN_SECRET;
-
-      const res = await fetch(`${API_BASE}/admin/create-user`, {
+      // Call Supabase Edge Function
+      const EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/create-user`;
+      
+      const res = await fetch(EDGE_FUNCTION_URL, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -124,7 +134,10 @@ export default function AddUserModal({
 
       // success
       setSuccessMsg("User created successfully.");
-      onCreated?.(body.profile ?? body.user ?? body);
+      // Call onCreated callback to refresh the user list
+      if (onCreated) {
+        onCreated(body.profile ?? body.user ?? body);
+      }
       // keep the password visible so admin can copy it; don't clear it automatically
       setLoading(false);
       // optionally close modal automatically after short delay

@@ -96,7 +96,7 @@ export default function FacultySidebar() {
           <div className="mb-2">Logged in as</div>
           <div className="font-medium text-gray-700 mb-3">Faculty</div>
           <div>
-            <a href="https://sathyabama.edu.in" className="text-purple-600 hover:underline">sathyabama.edu.in</a>
+            <a href="https://www.sathyabama.ac.in/" className="text-purple-600 hover:underline">sathyabama.edu.in</a>
           </div>
         </div>
       </aside>

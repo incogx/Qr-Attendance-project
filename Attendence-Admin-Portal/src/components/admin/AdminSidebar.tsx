@@ -7,7 +7,6 @@ import {
   Settings,
   Bell,
   Shield,
-  Plus,
   Menu,
   X,
   FileText,
@@ -129,14 +128,7 @@ export default function AdminSidebar() {
                   <span className="font-medium">Users</span>
                 </div>
 
-                <NavLink
-                  to="/admin/users/add"
-                  onClick={closeMobile}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-white border text-purple-600 hover:bg-purple-50 text-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden md:inline">Add</span>
-                </NavLink>
+               
               </NavLink>
             </div>
 

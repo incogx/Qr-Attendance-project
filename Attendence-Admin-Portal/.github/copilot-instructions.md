@@ -13,7 +13,7 @@
 
 Frontend `.env` (required):
 ```
-VITE_SUPABASE_URL=https://yddzfmwjijevnjyukogy.supabase.co
+VITE_SUPABASE_URL=https://mqnbcgatoppankntpmiu.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_ltOpFmBLULMokez6L6Q_-A_y8OtlW0h
 ```
 
