@@ -1,16 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { DownloadCloud, Trash2, Eye, Search } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext";
+import { useEffect, useMemo, useState } from "react";
+import { DownloadCloud, Trash2, Search, RefreshCw } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import * as XLSX from 'xlsx';
 
 /**
  * src/components/admin/AttendanceManagement.tsx
  *
- * Admin view to manage attendance reports across departments.
- *
- * - Replace API_LIST / API_DELETE with your real endpoints.
- * - Defensive: falls back to sample data if backend is not available.
+ * Admin view to manage approved attendance reports across departments.
  */
 
 type AttendanceEntry = {
@@ -25,58 +21,16 @@ type AttendanceReport = {
   id: string;
   session_id: string;
   class_no?: string;
-  class_name?: string;
-  instructor_name?: string;
+  faculty_name?: string;
   department?: string;
   session_date?: string;
   reviewed_at?: string;
   students?: AttendanceEntry[];
 };
 
-const API_LIST = "/api/admin/attendance";
-const API_DELETE = (id: string) => `/api/admin/attendance/${id}`;
-
-function sampleData(): AttendanceReport[] {
-  const d = new Date().toISOString().slice(0, 10);
-  return [
-    {
-      id: "r-1",
-      facultyName: "Dr. A. Kumar",
-      classId: "CS201",
-      className: "Data Structures",
-      department: "CSE",
-      date: d,
-      semester: "Fall 2025",
-      notes: "First lecture",
-      students: [
-        { student_id: "s1", student_name: "John Doe", roll_number: "001", present: true },
-        { student_id: "s2", student_name: "Jane Smith", roll_number: "002", present: false },
-      ],
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: "r-2",
-      facultyName: "Prof. S. Rao",
-      classId: "ME101",
-      className: "Mechanics",
-      department: "MECH",
-      date: d,
-      semester: "Fall 2025",
-      notes: "",
-      students: [
-        { student_id: "s3", student_name: "Alice", roll_number: "010", present: true },
-      ],
-      created_at: new Date().toISOString(),
-    },
-  ];
-}
-
 export default function AttendanceManagement() {
-  const auth = (useAuth?.() as any) ?? {};
-  const { user, profile } = auth;
-
-  const [reports, setReports] = useState<AttendanceReport[] | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [reports, setReports] = useState<AttendanceReport[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // UI controls
@@ -86,98 +40,99 @@ export default function AttendanceManagement() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
+  async function fetchReports() {
+    setLoading(true);
+    setError(null);
 
-      try {
-        // Fetch approved attendance sessions with student details
-        const { data: approvals, error: approvalsError } = await supabase
-          .from('approvals')
-          .select(`
+    try {
+      // Fetch approved sessions with class info
+      const { data: approvals, error: approvalsError } = await supabase
+        .from('approvals')
+        .select(`
+          id,
+          session_id,
+          reviewed_at,
+          sessions (
             id,
-            session_id,
-            reviewed_at,
-            sessions!inner (
-              id,
-              session_date,
-              classes!inner (
-                class_no,
-                name,
-                instructor_name,
-                department
-              )
+            session_date,
+            created_by,
+            class_id,
+            classes (
+              class_no,
+              department
             )
-          `)
-          .eq('status', 'APPROVED')
-          .order('reviewed_at', { ascending: false });
+          )
+        `)
+        .eq('status', 'APPROVED')
+        .order('reviewed_at', { ascending: false });
 
-        if (approvalsError) throw approvalsError;
+      if (approvalsError) throw approvalsError;
 
-        if (!mounted) return;
+      // Build reports with faculty names and student attendance
+      const reportsWithDetails = await Promise.all(
+        (approvals || []).map(async (approval: any) => {
+          const session = approval.sessions;
+          if (!session) return null;
 
-        // Fetch attendance records for each approved session
-        const reportsWithStudents = await Promise.all(
-          (approvals || []).map(async (approval: any) => {
-            const { data: attendance, error: attError } = await supabase
-              .from('attendance_marks')
-              .select(`
-                id,
-                student_id,
-                status,
-                marked_at,
-                students (
-                  reg_number,
-                  name
-                )
-              `)
-              .eq('session_id', approval.session_id);
+          // Get faculty name from profiles
+          let facultyName = 'N/A';
+          if (session.created_by) {
+            const { data: faculty } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', session.created_by)
+              .single();
+            facultyName = faculty?.full_name || 'N/A';
+          }
 
-            if (attError) console.error('Error fetching attendance:', attError);
+          // Get attendance records with student info
+          const { data: attendance } = await supabase
+            .from('attendance_marks')
+            .select(`
+              id,
+              student_id,
+              status,
+              marked_at,
+              students (
+                reg_number,
+                name
+              )
+            `)
+            .eq('session_id', session.id);
 
-            return {
-              id: approval.id,
-              session_id: approval.session_id,
-              class_no: approval.sessions.classes.class_no,
-              class_name: approval.sessions.classes.class_no || 'N/A', // Use class_no as fallback since name doesn't exist
-              instructor_name: 'N/A', // instructor_name field doesn't exist in classes table
-              department: approval.sessions.classes.department || 'N/A',
-              session_date: approval.sessions.session_date,
-              reviewed_at: approval.reviewed_at,
-              students: (attendance || []).map((att: any) => ({
-                student_id: att.student_id,
-                reg_number: att.students?.reg_number,
-                student_name: att.students?.name,
-                status: att.status || 'PRESENT',
-                marked_at: att.marked_at,
-              })),
-            };
-          })
-        );
+          return {
+            id: approval.id,
+            session_id: session.id,
+            class_no: session.classes?.class_no || 'N/A',
+            faculty_name: facultyName,
+            department: session.classes?.department || 'N/A',
+            session_date: session.session_date,
+            reviewed_at: approval.reviewed_at,
+            students: (attendance || []).map((att: any) => ({
+              student_id: att.student_id,
+              reg_number: att.students?.reg_number || '',
+              student_name: att.students?.name || '',
+              status: att.status || 'PRESENT',
+              marked_at: att.marked_at,
+            })),
+          };
+        })
+      );
 
-        if (mounted) {
-          setReports(reportsWithStudents);
-        }
-      } catch (err: any) {
-        console.error("[AttendanceManagement] fetch error:", err);
-        if (!mounted) return;
-        setError(String(err?.message ?? "Failed to load attendance reports"));
-        setReports([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
+      setReports(reportsWithDetails.filter(Boolean) as AttendanceReport[]);
+    } catch (err: any) {
+      console.error("[AttendanceManagement] fetch error:", err);
+      setError(err?.message || "Failed to load attendance reports");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    load();
-    return () => {
-      mounted = false;
-    };
+  useEffect(() => {
+    fetchReports();
   }, []);
 
   const filtered = useMemo(() => {
-    if (!reports) return [];
     return reports.filter((r) => {
       if (department !== "ALL" && (r.department ?? "").toUpperCase() !== department.toUpperCase()) return false;
       if (date && r.session_date !== date) return false;
@@ -185,8 +140,7 @@ export default function AttendanceManagement() {
       const q = query.toLowerCase();
       return (
         (r.class_no ?? "").toLowerCase().includes(q) ||
-        (r.class_name ?? "").toLowerCase().includes(q) ||
-        (r.instructor_name ?? "").toLowerCase().includes(q) ||
+        (r.faculty_name ?? "").toLowerCase().includes(q) ||
         (r.department ?? "").toLowerCase().includes(q)
       );
     });
@@ -217,8 +171,8 @@ export default function AttendanceManagement() {
     // Prepare data for Excel
     const worksheetData = [
       ['Attendance Report'],
-      ['Class:', r.class_no, r.class_name || ''],
-      ['Instructor:', r.instructor_name || ''],
+      ['Class:', r.class_no || ''],
+      ['Faculty:', r.faculty_name || ''],
       ['Department:', r.department || ''],
       ['Date:', r.session_date || ''],
       ['Approved:', r.reviewed_at ? new Date(r.reviewed_at).toLocaleString() : ''],
@@ -241,9 +195,9 @@ export default function AttendanceManagement() {
     const absentCount = (r.students || []).filter(s => s.status === 'ABSENT').length;
     worksheetData.push([]);
     worksheetData.push(['Summary']);
-    worksheetData.push(['Present:', presentCount]);
-    worksheetData.push(['Absent:', absentCount]);
-    worksheetData.push(['Total:', r.students?.length || 0]);
+    worksheetData.push(['Present:', String(presentCount)]);
+    worksheetData.push(['Absent:', String(absentCount)]);
+    worksheetData.push(['Total:', String(r.students?.length || 0)]);
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
@@ -272,10 +226,19 @@ export default function AttendanceManagement() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Attendance Management</h1>
-          <p className="text-sm text-slate-500 mt-1">View and manage attendance reports across departments.</p>
+          <p className="text-sm text-slate-500 mt-1">View and manage approved attendance reports.</p>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={fetchReports}
+            disabled={loading}
+            className="px-3 py-2 rounded-md border text-sm hover:bg-slate-50 inline-flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input
@@ -305,7 +268,7 @@ export default function AttendanceManagement() {
       )}
 
       <div className="rounded-2xl border bg-white p-4">
-        {loading && !reports ? (
+        {loading && reports.length === 0 ? (
           <div className="animate-pulse">
             <div className="h-6 bg-slate-200 rounded w-1/4 mb-4" />
             <div className="h-48 bg-slate-100 rounded" />
@@ -319,7 +282,7 @@ export default function AttendanceManagement() {
                   <th className="py-2 px-3">Class</th>
                   <th className="py-2 px-3">Department</th>
                   <th className="py-2 px-3">Faculty</th>
-                  <th className="py-2 px-3">Students</th>
+                  <th className="py-2 px-3">Present / Absent / Total</th>
                   <th className="py-2 px-3">Actions</th>
                 </tr>
               </thead>
@@ -328,7 +291,7 @@ export default function AttendanceManagement() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-8 px-3 text-center text-slate-500">
-                      No reports found.
+                      {reports.length === 0 ? "No approved reports found." : "No reports match your filters."}
                     </td>
                   </tr>
                 )}
@@ -342,12 +305,9 @@ export default function AttendanceManagement() {
                       <td className="py-3 px-3 text-xs text-slate-600">
                         {r.session_date ? new Date(r.session_date).toLocaleDateString() : "-"}
                       </td>
-                      <td className="py-3 px-3">
-                        <div className="font-medium">{r.class_no ?? "-"}</div>
-                        <div className="text-xs text-slate-500">{r.class_name}</div>
-                      </td>
+                      <td className="py-3 px-3 font-medium">{r.class_no ?? "-"}</td>
                       <td className="py-3 px-3">{r.department ?? "-"}</td>
-                      <td className="py-3 px-3">{r.instructor_name ?? "-"}</td>
+                      <td className="py-3 px-3">{r.faculty_name ?? "-"}</td>
                       <td className="py-3 px-3">
                         <div className="text-sm">
                           <span className="text-green-600 font-medium">{presentCount}</span>
@@ -372,12 +332,12 @@ export default function AttendanceManagement() {
                             className="px-3 py-1 rounded-md border text-sm inline-flex items-center gap-2 hover:bg-slate-50 transition-colors"
                             title="Delete report"
                           >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>

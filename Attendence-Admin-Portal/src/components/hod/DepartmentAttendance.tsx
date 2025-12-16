@@ -18,6 +18,7 @@ type AttendanceEntry = {
   id?: string;
   roll_number?: string;
   student_name?: string;
+  phone?: string;
   present?: boolean;
 };
 
@@ -174,6 +175,44 @@ export default function DepartmentAttendance() {
     }
   }
 
+  async function loadStudentsForSession(sessionId: string) {
+    try {
+      const { data: attendance, error } = await supabase
+        .from('attendance_marks')
+        .select(`
+          id,
+          student_id,
+          status,
+          students (
+            id,
+            reg_number,
+            name,
+            phone
+          )
+        `)
+        .eq('session_id', sessionId);
+
+      if (error) throw error;
+
+      // Update selected report with student data
+      setSelectedReport((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          students: (attendance || []).map((att: any) => ({
+            id: att.id,
+            roll_number: att.students?.reg_number,
+            student_name: att.students?.name,
+            phone: att.students?.phone,
+            present: att.status === 'PRESENT',
+          })),
+        };
+      });
+    } catch (err: any) {
+      console.error("Failed to load students:", err);
+    }
+  }
+
   function formatDateSafe(d?: string) {
     if (!d) return "-";
     const parsed = Date.parse(d);
@@ -300,7 +339,10 @@ export default function DepartmentAttendance() {
                     <td className="py-3 px-4">
                       <div className="flex flex-wrap items-center gap-2">
                         <button
-                          onClick={() => setSelectedReport(report)}
+                          onClick={() => {
+                            setSelectedReport(report);
+                            loadStudentsForSession(report.id);
+                          }}
                           className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-2"
                         >
                           <Eye className="w-3 h-3" /> View
@@ -378,7 +420,8 @@ export default function DepartmentAttendance() {
                     <tr>
                       <th className="py-2 px-3 text-xs text-slate-600">Roll</th>
                       <th className="py-2 px-3 text-xs text-slate-600">Name</th>
-                      <th className="py-2 px-3 text-xs text-slate-600">Present</th>
+                      <th className="py-2 px-3 text-xs text-slate-600">Phone</th>
+                      <th className="py-2 px-3 text-xs text-slate-600">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -386,12 +429,23 @@ export default function DepartmentAttendance() {
                       <tr key={s.id ?? `${s.roll_number}-${s.student_name}`} className="odd:bg-white even:bg-slate-50">
                         <td className="py-2 px-3 text-xs">{s.roll_number}</td>
                         <td className="py-2 px-3 text-sm">{s.student_name}</td>
-                        <td className="py-2 px-3 text-xs">{s.present ? "Present" : "Absent"}</td>
+                        <td className="py-2 px-3 text-xs">
+                          {s.phone ? (
+                            <span className="font-mono text-blue-600">{s.phone}</span>
+                          ) : (
+                            <span className="text-slate-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-xs">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${s.present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {s.present ? "Present" : "Absent"}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                     {(selectedReport.students ?? []).length === 0 && (
                       <tr>
-                        <td colSpan={3} className="py-6 px-3 text-center text-slate-500">No student rows available</td>
+                        <td colSpan={4} className="py-6 px-3 text-center text-slate-500">No student rows available</td>
                       </tr>
                     )}
                   </tbody>

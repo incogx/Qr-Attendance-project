@@ -1,6 +1,7 @@
 // src/components/admin/AdminSidebar.tsx
-import React, { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useState } from "react";
+import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
 import {
   BarChart3,
   Users,
@@ -17,7 +18,7 @@ type NavItemProps = {
   to: string;
   label: string;
   end?: boolean;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   onClick?: () => void;
 };
 
@@ -43,7 +44,6 @@ function NavItem({ to, label, end = false, icon, onClick }: NavItemProps) {
 
 export default function AdminSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const location = useLocation();
 
   const closeMobile = () => setMobileOpen(false);
 
@@ -92,9 +92,10 @@ export default function AdminSidebar() {
             </div>
           </div>
 
-          {/* Navigation */}
+          {/* Navigation with sections */}
           <nav className="flex-1">
-            <div className="mb-4">
+            <div className="text-xs font-semibold text-slate-500 mb-2">OVERVIEW</div>
+            <div className="flex flex-col gap-2 mb-6">
               <NavItem
                 to="/admin"
                 label="Dashboard"
@@ -102,48 +103,26 @@ export default function AdminSidebar() {
                 icon={<BarChart3 className="w-5 h-5" />}
                 onClick={closeMobile}
               />
-            </div>
-
-            {/* USERS */}
-            <div className="mb-4">
-              <NavLink
+              <NavItem
                 to="/admin/users"
+                label="Users"
+                icon={<Users className="w-5 h-5" />}
                 onClick={closeMobile}
-                className={({ isActive }) =>
-                  [
-                    "flex items-center justify-between px-4 py-3 rounded-lg mb-3 transition",
-                    "focus:outline-none focus:ring-2 focus:ring-purple-300",
-                    isActive ? "bg-purple-600 text-white" : "text-gray-700 hover:bg-gray-50"
-                  ].join(" ")
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <Users
-                    className={`w-5 h-5 ${
-                      location.pathname.startsWith("/admin/users")
-                        ? "text-white"
-                        : "text-gray-600"
-                    }`}
-                  />
-                  <span className="font-medium">Users</span>
-                </div>
-
-               
-              </NavLink>
+              />
             </div>
 
-            {/* Attendance Management */}
-            <div className="mb-4">
-              <NavItem to="/admin/attendance" label="Attendance Management" icon={<FileText className="w-4 h-4" />} onClick={closeMobile} />
-              <NavItem to="/admin/messaging" label="Messaging System" icon={<MessageSquare className="w-4 h-4" />} onClick={closeMobile} />
+            <div className="text-xs font-semibold text-slate-500 mb-2">ATTENDANCE</div>
+            <div className="flex flex-col gap-2 mb-6">
+              <NavItem to="/admin/attendance" label="Attendance Management" icon={<FileText className="w-5 h-5" />} onClick={closeMobile} />
+              <NavItem to="/admin/messaging" label="Messaging" icon={<MessageSquare className="w-5 h-5" />} onClick={closeMobile} />
             </div>
 
-            {/* Other Sections */}
-            <div className="space-y-2">
-              <NavItem to="/admin/analytics" label="Analytics" icon={<BarChart3 className="w-4 h-4" />} onClick={closeMobile} />
-              <NavItem to="/admin/notifications" label="Notifications" icon={<Bell className="w-4 h-4" />} onClick={closeMobile} />
-              <NavItem to="/admin/moderation" label="Moderation" icon={<Shield className="w-4 h-4" />} onClick={closeMobile} />
-              <NavItem to="/admin/settings" label="Settings" icon={<Settings className="w-4 h-4" />} onClick={closeMobile} />
+            <div className="text-xs font-semibold text-slate-500 mb-2">OTHER</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/admin/analytics" label="Analytics" icon={<BarChart3 className="w-5 h-5" />} onClick={closeMobile} />
+              <NavItem to="/admin/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={closeMobile} />
+              <NavItem to="/admin/moderation" label="Moderation" icon={<Shield className="w-5 h-5" />} onClick={closeMobile} />
+              <NavItem to="/admin/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={closeMobile} />
             </div>
           </nav>
 

@@ -1,18 +1,22 @@
 // src/components/admin/DashboardPanel.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { supabase } from "../../lib/supabase";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   ResponsiveContainer,
   LineChart,
   Line,
-  XAxis,
-  Tooltip,
-  YAxis,
-  CartesianGrid,
 } from "recharts";
 
-type Counts = { totalUsers: number; totalFaculty: number; totalHod: number };
+type Counts = { 
+  totalUsers: number; 
+  totalFaculty: number; 
+  totalHod: number;
+  totalAdmins: number;
+  totalStudents: number;
+  todaySessions: number;
+  weekSessions: number;
+};
 
 function formatDay(d: Date) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); // e.g. "Dec 3"
@@ -42,7 +46,7 @@ function StatCard({
   value: number | string;
   loading?: boolean;
   onClick?: () => void;
-  chart?: React.ReactNode;
+  chart?: ReactNode;
 }) {
   const Wrapper: any = onClick ? "button" : "div";
   return (
@@ -71,7 +75,15 @@ function StatCard({
 }
 
 export default function DashboardPanel() {
-  const [counts, setCounts] = useState<Counts>({ totalUsers: 0, totalFaculty: 0, totalHod: 0 });
+  const [counts, setCounts] = useState<Counts>({ 
+    totalUsers: 0, 
+    totalFaculty: 0, 
+    totalHod: 0,
+    totalAdmins: 0,
+    totalStudents: 0,
+    todaySessions: 0,
+    weekSessions: 0
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
@@ -87,24 +99,64 @@ export default function DashboardPanel() {
     setError(null);
 
     try {
-      // three HEAD queries to get exact counts without fetching rows
-      const qAll = supabase.from("profiles").select("*", { count: "exact", head: true });
-      const qFaculty = supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "FACULTY");
-      const qHod = supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "HOD");
+      // Profile counts - fetch actual data to debug
+      const { data: allProfiles, error: allError, count: allCount } = await supabase
+        .from("profiles")
+        .select("role", { count: "exact" });
+      
+      console.log("All profiles:", allProfiles);
+      console.log("Total count:", allCount);
+      
+      if (allError) {
+        console.error("Error fetching profiles:", allError);
+        throw new Error(allError.message);
+      }
 
-      const [resAll, resFaculty, resHod] = await Promise.all([qAll, qFaculty, qHod]);
+      // Count by role manually to ensure accuracy
+      const totalUsers = allCount ?? 0;
+      const totalFaculty = allProfiles?.filter(p => p.role === "FACULTY").length ?? 0;
+      const totalHod = allProfiles?.filter(p => p.role === "HOD").length ?? 0;
+      const totalAdmins = allProfiles?.filter(p => p.role === "ADMIN").length ?? 0;
+      
+      console.log("Counts:", { totalUsers, totalFaculty, totalHod, totalAdmins });
+      
+      // Student count
+      const qStudents = supabase.from("students").select("*", { count: "exact", head: true });
+      
+      // Session counts
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayISO = today.toISOString().split('T')[0];
+      
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const weekAgoISO = weekAgo.toISOString().split('T')[0];
+      
+      const qTodaySessions = supabase
+        .from("sessions")
+        .select("*", { count: "exact", head: true })
+        .gte("session_date", todayISO);
+      
+      const qWeekSessions = supabase
+        .from("sessions")
+        .select("*", { count: "exact", head: true })
+        .gte("session_date", weekAgoISO);
 
-      const anyError = (resAll as any)?.error || (resFaculty as any)?.error || (resHod as any)?.error;
+      const [resStudents, resToday, resWeek] = 
+        await Promise.all([qStudents, qTodaySessions, qWeekSessions]);
+
+      const anyError = (resStudents as any)?.error || 
+                       (resToday as any)?.error || (resWeek as any)?.error;
       if (anyError) {
         console.error("Supabase count error:", anyError);
         throw new Error((anyError as any)?.message || "Failed to load counts");
       }
 
-      const totalUsers = (resAll as any)?.count ?? 0;
-      const totalFaculty = (resFaculty as any)?.count ?? 0;
-      const totalHod = (resHod as any)?.count ?? 0;
+      const totalStudents = (resStudents as any)?.count ?? 0;
+      const todaySessions = (resToday as any)?.count ?? 0;
+      const weekSessions = (resWeek as any)?.count ?? 0;
 
-      setCounts({ totalUsers, totalFaculty, totalHod });
+      setCounts({ totalUsers, totalFaculty, totalHod, totalAdmins, totalStudents, todaySessions, weekSessions });
       setLastUpdated(Date.now());
     } catch (err: any) {
       console.error("fetchCounts error:", err);
@@ -173,7 +225,7 @@ export default function DashboardPanel() {
           <h1 id="dashboard-heading" className="text-2xl font-bold text-gray-900">
             Dashboard
           </h1>
-          <p className="text-sm text-gray-500">Overview of users and recent signups</p>
+          <p className="text-sm text-gray-500">Overview of users and recent activity</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -209,7 +261,7 @@ export default function DashboardPanel() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Users"
           value={counts.totalUsers}
@@ -262,6 +314,35 @@ export default function DashboardPanel() {
               </ResponsiveContainer>
             )
           }
+        />
+
+        <StatCard
+          title="Total Admins"
+          value={counts.totalAdmins}
+          loading={loading}
+          onClick={() => navigate("/admin/users?role=ADMIN")}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+        <StatCard
+          title="Total Students"
+          value={counts.totalStudents}
+          loading={loading}
+        />
+
+        <StatCard
+          title="Sessions Today"
+          value={counts.todaySessions}
+          loading={loading}
+          onClick={() => navigate("/admin/attendance")}
+        />
+
+        <StatCard
+          title="Sessions This Week"
+          value={counts.weekSessions}
+          loading={loading}
+          onClick={() => navigate("/admin/attendance")}
         />
       </div>
     </section>

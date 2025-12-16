@@ -101,42 +101,6 @@ serve(async (req) => {
       })
       .eq("id", approval.session_id);
 
-    // ---- If approved, notify admins with only ABSENT students ----
-    if (action === "APPROVED") {
-      // Get absentees for this session
-      const { data: absentees } = await supabaseAdmin
-        .from("attendance_marks")
-        .select("student_id, students(roll_number,name)")
-        .eq("session_id", approval.session_id)
-        .eq("status", "ABSENT");
-
-      // Find admin users
-      const { data: admins } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("role", "ADMIN");
-
-      const count = absentees?.length ?? 0;
-      if (admins && admins.length > 0 && count > 0) {
-        const names = (absentees || [])
-          .map((a: any) => a.students?.roll_number || a.students?.name || a.student_id)
-          .filter(Boolean)
-          .slice(0, 20)
-          .join(", ");
-
-        const title = `Absentees for approved session`;
-        const message = count > 20
-          ? `Total absentees: ${count}. Sample: ${names}...`
-          : `Total absentees: ${count}. ${names}`;
-
-        // Insert notifications for each admin (bulk insert)
-        const rows = admins.map((ad: any) => ({ user_id: ad.id, title, message }));
-        if (rows.length > 0) {
-          await supabaseAdmin.from("notifications").insert(rows);
-        }
-      }
-    }
-
     return new Response(
       JSON.stringify({
         success: true,

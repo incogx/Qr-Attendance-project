@@ -1,22 +1,23 @@
-import React, { useState } from "react";
-import { Send, MessageSquare, Users } from "lucide-react";
-import { MessagingResult } from "../../types/attendance";
+import { useState, useEffect } from "react";
+import { Send, MessageSquare, Users, CheckCircle, AlertCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
-/* Function to send messages - currently just shows success alert */
-async function sendBulkMessages(message: string, studentIds: string[]): Promise<MessagingResult> {
-  // Placeholder - will be implemented when messaging system is ready
-  await new Promise(r => setTimeout(r, 500));
-  return {
-    success: true,
-    total_sent: studentIds.length,
-    total_failed: 0,
-    message: `Message sent successfully to ${studentIds.length} student(s)`
-  };
-}
+type StudentWithPhone = { 
+  id: string; 
+  name: string; 
+  reg_number: string; 
+  class_no: string;
+  phone?: string;
+};
+
+type MessageStatus = {
+  studentId: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed';
+  message?: string;
+};
 
 /* Function to get absent students from approved sessions */
-async function getAbsentStudents(): Promise<{ id: string; name: string; reg_number: string; class_no: string }[]> {
+async function getAbsentStudents(): Promise<StudentWithPhone[]> {
   try {
     // Get approved sessions
     const { data: approvals, error: approvalsError } = await supabase
@@ -36,7 +37,7 @@ async function getAbsentStudents(): Promise<{ id: string; name: string; reg_numb
 
     if (!approvals || approvals.length === 0) return [];
 
-    // Get all absent students from these sessions
+    // Get all absent students from these sessions with phone numbers
     const sessionIds = approvals.map((a: any) => a.session_id);
     
     const { data: absentAttendance, error: attendanceError } = await supabase
@@ -47,7 +48,8 @@ async function getAbsentStudents(): Promise<{ id: string; name: string; reg_numb
         students (
           id,
           name,
-          reg_number
+          reg_number,
+          phone
         ),
         sessions!inner (
           classes!inner (
@@ -68,6 +70,7 @@ async function getAbsentStudents(): Promise<{ id: string; name: string; reg_numb
           id: att.students.id,
           name: att.students.name || 'Unknown',
           reg_number: att.students.reg_number || 'N/A',
+          phone: att.students.phone || '',
           class_no: att.sessions?.classes?.class_no || 'N/A',
         });
       }
@@ -83,14 +86,93 @@ async function getAbsentStudents(): Promise<{ id: string; name: string; reg_numb
 export default function MessagingSystem() {
   const [message, setMessage] = useState('');
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
-  const [absentStudents, setAbsentStudents] = useState<{ id: string; name: string; reg_number: string; class_no: string }[]>([]);
+  const [absentStudents, setAbsentStudents] = useState<StudentWithPhone[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(true);
-  const [messagingResult, setMessagingResult] = useState<MessagingResult | null>(null);
+  const [sendingPhoneNumber, setSendingPhoneNumber] = useState('');
+  const [showPhonePrompt, setShowPhonePrompt] = useState(false);
+  const [messageStatuses, setMessageStatuses] = useState<Map<string, MessageStatus>>(new Map());
 
-  React.useEffect(() => {
-    loadAbsentStudents();
-  }, []);
+  const handleSendMessages = async () => {
+    if (!message.trim() || selectedStudents.length === 0) {
+      alert('Please enter a message and select at least one student');
+      return;
+    }
+
+    setShowPhonePrompt(true);
+  };
+
+  const proceedWithSending = async () => {
+    if (!sendingPhoneNumber.trim()) {
+      alert('Please enter the phone number to send messages from');
+      return;
+    }
+
+    setShowPhonePrompt(false);
+    setLoading(true);
+    setMessageStatuses(new Map());
+
+    try {
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const studentId of selectedStudents) {
+        const student = absentStudents.find(s => s.id === studentId);
+        if (!student) continue;
+
+        // Update status to sending
+        setMessageStatuses(prev => {
+          const updated = new Map(prev);
+          updated.set(studentId, {
+            studentId,
+            status: 'sending',
+            message: `Sending to ${student.name}...`
+          });
+          return updated;
+        });
+
+        try {
+          // Simulate message sending (replace with real SMS/WhatsApp API later)
+          await new Promise(r => setTimeout(r, 800));
+
+          // Update status to sent
+          setMessageStatuses(prev => {
+            const updated = new Map(prev);
+            updated.set(studentId, {
+              studentId,
+              status: 'sent',
+              message: `✓ Message sent to ${student.name}`
+            });
+            return updated;
+          });
+          successCount++;
+        } catch (error) {
+          // Update status to failed
+          setMessageStatuses(prev => {
+            const updated = new Map(prev);
+            updated.set(studentId, {
+              studentId,
+              status: 'failed',
+              message: `✗ Failed to send to ${student.name}`
+            });
+            return updated;
+          });
+          failureCount++;
+        }
+      }
+
+      // Show final summary
+      setTimeout(() => {
+        alert(`Messages processed!\nSent: ${successCount}\nFailed: ${failureCount}`);
+        setMessage('');
+        setSelectedStudents([]);
+        setSendingPhoneNumber('');
+        setMessageStatuses(new Map());
+      }, 1000);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadAbsentStudents = async () => {
     setLoadingStudents(true);
@@ -101,27 +183,6 @@ export default function MessagingSystem() {
       console.error("Failed to load absent students:", error);
     } finally {
       setLoadingStudents(false);
-    }
-  };
-
-  const handleSendMessages = async () => {
-    if (!message.trim() || selectedStudents.length === 0) {
-      alert('Please enter a message and select at least one student');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await sendBulkMessages(message, selectedStudents);
-      setMessagingResult(result);
-      alert('Message sent successfully!');
-      setMessage('');
-      setSelectedStudents([]);
-    } catch (error) {
-      console.error("Failed to send messages:", error);
-      alert('Failed to send message');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -140,6 +201,11 @@ export default function MessagingSystem() {
         : [...prev, studentId]
     );
   };
+
+  // Load absent students on mount
+  useEffect(() => {
+    loadAbsentStudents();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -186,6 +252,37 @@ export default function MessagingSystem() {
               </button>
             </div>
           </div>
+
+          {/* Message Status Display */}
+          {messageStatuses.size > 0 && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="font-medium text-slate-900 mb-3">Sending Status</h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {Array.from(messageStatuses.values()).map((status) => (
+                  <div key={status.studentId} className="flex items-center gap-2 text-sm">
+                    {status.status === 'sending' && (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                        <span className="text-blue-600">{status.message}</span>
+                      </>
+                    )}
+                    {status.status === 'sent' && (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-green-600">{status.message}</span>
+                      </>
+                    )}
+                    {status.status === 'failed' && (
+                      <>
+                        <AlertCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-red-600">{status.message}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Student Selector */}
@@ -223,20 +320,64 @@ export default function MessagingSystem() {
                     type="checkbox"
                     checked={selectedStudents.includes(student.id)}
                     onChange={() => handleStudentToggle(student.id)}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <div className="flex-1">
-                  <div className="font-medium">{student.name}</div>
-                  <div className="text-sm text-slate-500">
-                    {student.reg_number} • Class {student.class_no}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">{student.name}</div>
+                    <div className="text-sm text-slate-500">
+                      {student.reg_number} • Class {student.class_no}
+                    </div>
+                    {student.phone && (
+                      <div className="text-xs text-slate-400 mt-1">
+                        📱 {student.phone}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
               ))
             )}
           </div>
         </div>
       </div>
+
+      {/* Phone Number Prompt Modal */}
+      {showPhonePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg p-6 w-[min(500px,94%)] shadow-xl">
+            <h2 className="text-lg font-semibold mb-4">Enter Phone Number</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Which phone number should we send these messages from?
+            </p>
+            
+            <input
+              type="tel"
+              value={sendingPhoneNumber}
+              onChange={(e) => setSendingPhoneNumber(e.target.value)}
+              placeholder="e.g., +91 9876543210 or your service number"
+              className="w-full px-4 py-2 border rounded-lg mb-4 text-sm"
+              autoFocus
+            />
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowPhonePrompt(false);
+                  setSendingPhoneNumber('');
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={proceedWithSending}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Send Messages
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

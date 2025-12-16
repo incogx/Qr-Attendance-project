@@ -69,18 +69,18 @@ export default function HodSidebar() {
           {/* Sectioned navigation with generous gaps */}
           <nav className="flex flex-col">
             <div className="text-xs font-semibold text-slate-500 mb-2">OVERVIEW</div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 mb-6">
               <NavItem to="/hod" label="Dashboard" icon={<BarChart3 className="w-5 h-5" />} onClick={close} end />
               <NavItem to="/hod/faculty" label="Faculty" icon={<Users className="w-5 h-5" />} onClick={close} />
             </div>
 
-            <div className="mt-6 text-xs font-semibold text-slate-500 mb-2">ATTENDANCE</div>
-            <div className="flex flex-col gap-2">
+            <div className="text-xs font-semibold text-slate-500 mb-2">ATTENDANCE</div>
+            <div className="flex flex-col gap-2 mb-6">
               <NavItem to="/hod/attendance" label="Department Attendance" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
               <NavItem to="/hod/approvals" label="Approvals" icon={<ClipboardCheck className="w-5 h-5" />} onClick={close} />
             </div>
 
-            <div className="mt-6 text-xs font-semibold text-slate-500 mb-2">OTHER</div>
+            <div className="text-xs font-semibold text-slate-500 mb-2">OTHER</div>
             <div className="flex flex-col gap-2">
               <NavItem to="/hod/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
               <NavItem to="/hod/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />

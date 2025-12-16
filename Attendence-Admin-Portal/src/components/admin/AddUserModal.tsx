@@ -111,23 +111,19 @@ export default function AddUserModal({
         password: pwToSend,
       };
 
-      // Call Supabase Edge Function
-      const EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/create-user`;
-      
-      const res = await fetch(EDGE_FUNCTION_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(payload),
+      // Call Supabase Edge Function using supabase.functions.invoke
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: payload,
       });
 
-      const body = await res.json().catch(() => ({}));
+      if (error) {
+        setErrorMsg(error.message || "Failed to create user");
+        setLoading(false);
+        return;
+      }
 
-      if (!res.ok) {
-        // show server message if present
-        setErrorMsg(body?.error || body?.message || `Server returned ${res.status}`);
+      if (data?.error) {
+        setErrorMsg(data.error);
         setLoading(false);
         return;
       }
@@ -136,7 +132,7 @@ export default function AddUserModal({
       setSuccessMsg("User created successfully.");
       // Call onCreated callback to refresh the user list
       if (onCreated) {
-        onCreated(body.profile ?? body.user ?? body);
+        onCreated(data?.profile ?? data?.user ?? data);
       }
       // keep the password visible so admin can copy it; don't clear it automatically
       setLoading(false);

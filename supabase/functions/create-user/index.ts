@@ -1,20 +1,16 @@
 // supabase/functions/create-user/index.ts
-// @ts-nocheck
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 serve(async (req) => {
-  // ---------- CORS ----------
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
@@ -40,15 +36,21 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
-      return jsonError("Invalid user", 401);
+      console.error("Auth error:", userError);
+      return jsonError(`Invalid user: ${userError?.message || "No user found"}`, 401);
     }
 
     // Check if user is ADMIN
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
+
+    if (profileError) {
+      console.error("Profile fetch error:", profileError);
+      return jsonError(`Profile error: ${profileError.message}`, 403);
+    }
 
     if (!profile || profile.role !== "ADMIN") {
       return jsonError("Only admins can create users", 403);
