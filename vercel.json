@@ -1,7 +1,8 @@
 {
-  "buildCommand": "cd Attendence-Admin-Portal && npm install && npm run build",
-  "outputDirectory": "Attendence-Admin-Portal/dist",
-  "installCommand": "cd Attendence-Admin-Portal && npm install",
+  "projectSettings": {
+    "rootDirectory": "Attendence-Admin-Portal",
+    "nodeVersion": "18.x"
+  },
   "rewrites": [
     {
       "source": "/(.*)",
