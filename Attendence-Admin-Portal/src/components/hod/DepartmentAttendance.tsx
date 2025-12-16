@@ -1,6 +1,8 @@
 // src/components/hod/DepartmentAttendance.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Eye, Clock, CheckCircle, XCircle } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 /**
  * DepartmentAttendance.tsx
@@ -10,7 +12,7 @@ import { Download, Eye, Clock, CheckCircle, XCircle } from "lucide-react";
  */
 
 /* ---------------------- Types ---------------------- */
-type AttendanceStatus = "DRAFT" | "SUBMITTED_TO_HOD" | "HOD_APPROVED" | "CHANGES_REQUESTED" | string;
+type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | string;
 
 type AttendanceEntry = {
   id?: string;
@@ -24,74 +26,116 @@ type AttendanceReport = {
   faculty_id: string;
   department_id: string;
   class_id: string;
+  class_name?: string;
   date: string; // ISO date or string
   semester?: string;
-  status: AttendanceStatus;
+  status: ApprovalStatus; // based on approvals.status or sessions.status
   created_at?: string;
   updated_at?: string;
   approved_at?: string | null;
+  approval_id?: string | null;
   students?: AttendanceEntry[];
 };
 
-/* ------------------- Mock API / Data ------------------- */
-async function mockFetchReports(): Promise<AttendanceReport[]> {
-  await new Promise((r) => setTimeout(r, 300));
-  const now = new Date().toISOString();
-  return [
-    {
-      id: "1",
-      faculty_id: "f1",
-      department_id: "CSE",
-      class_id: "CS201",
-      date: "2024-01-15",
-      semester: "Spring 2024",
-      status: "SUBMITTED_TO_HOD",
-      created_at: now,
-      updated_at: now,
-      students: [
-        { id: "s1", roll_number: "001", student_name: "John Doe", present: true },
-        { id: "s2", roll_number: "002", student_name: "Jane Smith", present: false },
-      ],
-    },
-    {
-      id: "2",
-      faculty_id: "f2",
-      department_id: "CSE",
-      class_id: "CS301",
-      date: "2024-01-15",
-      semester: "Spring 2024",
-      status: "HOD_APPROVED",
-      created_at: now,
-      updated_at: now,
-      approved_at: now,
-      students: [
-        { id: "s3", roll_number: "003", student_name: "Alice Kumar", present: true },
-        { id: "s4", roll_number: "004", student_name: "Bob Lee", present: true },
-      ],
-    },
-  ];
+/* ------------------- Helpers ------------------- */
+function mapStatusForBadge(status?: string): ApprovalStatus {
+  if (!status) return "PENDING";
+  const s = status.toUpperCase();
+  return s === "APPROVED" || s === "REJECTED" || s === "PENDING" ? (s as ApprovalStatus) : "PENDING";
 }
 
 /* --------------------- Component --------------------- */
 export default function DepartmentAttendance() {
+  const { user } = useAuth() as any;
   const [reports, setReports] = useState<AttendanceReport[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedReport, setSelectedReport] = useState<AttendanceReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // optional: toast UI can be wired later
 
   useEffect(() => {
-    loadReports();
-  }, []);
+    if (user) loadReports();
+  }, [user]);
 
   async function loadReports() {
     setLoading(true);
     setError(null);
     try {
-      const data = await mockFetchReports();
-      setReports(data);
+      // 1) Get HOD department
+      const { data: hodProfile, error: hodErr } = await supabase
+        .from("profiles")
+        .select("department")
+        .eq("id", user.id)
+        .single();
+      if (hodErr) throw hodErr;
+      const dept = String(hodProfile?.department || "").trim();
+
+      if (!dept) {
+        setReports([]);
+        setError("Your department is not set in profile.");
+        setLoading(false);
+        return;
+      }
+
+      // 2) Find classes in this department
+      const { data: classRows, error: classErr } = await supabase
+        .from("classes")
+        .select("id, class_no, department")
+        .eq("department", dept);
+      if (classErr) throw classErr;
+      const classIds = (classRows || []).map((c: any) => c.id);
+      if (classIds.length === 0) {
+        setReports([]);
+        setLoading(false);
+        return;
+      }
+
+      // 3) Fetch sessions in these classes with most recent first
+      const { data: sessionRows, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, class_id, session_date, status, created_by, created_at")
+        .in("class_id", classIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (sessErr) throw sessErr;
+      const sessionIds = (sessionRows || []).map((s: any) => s.id);
+
+      // 4) Fetch approvals for these sessions
+      const { data: approvalRows, error: apprErr } = await supabase
+        .from("approvals")
+        .select("id, session_id, status, reviewed_at")
+        .in("session_id", sessionIds);
+      if (apprErr) throw apprErr;
+      const approvalsBySession = new Map<string, any>();
+      (approvalRows || []).forEach((a: any) => approvalsBySession.set(a.session_id, a));
+
+      // 5) Map to UI type, include class info
+      const classById = new Map<string, any>();
+      (classRows || []).forEach((c: any) => classById.set(c.id, c));
+      const mapped: AttendanceReport[] = (sessionRows || []).map((s: any) => {
+        const appr = approvalsBySession.get(s.id);
+        const cls = classById.get(s.class_id);
+        return {
+          id: s.id,
+          faculty_id: s.created_by,
+          department_id: dept,
+          class_id: s.class_id,
+          class_name: cls?.class_no || "",
+          date: s.session_date,
+          semester: undefined,
+          status: mapStatusForBadge(appr?.status || s.status),
+          created_at: s.created_at,
+          // updated_at may not exist in schema; omit
+          approved_at: appr?.reviewed_at ?? null,
+          approval_id: appr?.id ?? null,
+          students: [],
+        };
+      });
+
+      setReports(mapped);
     } catch (err: any) {
       console.error("Failed to load reports:", err);
-      setError("Failed to load reports. Try again.");
+      setError(err?.message || "Failed to load reports. Try again.");
       setReports([]);
     } finally {
       setLoading(false);
@@ -99,14 +143,35 @@ export default function DepartmentAttendance() {
   }
 
   async function handleApprove(reportId: string) {
-    // optimistic UI - replace with real API call
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, status: "HOD_APPROVED", approved_at: new Date().toISOString() } : r))
-    );
+    const report = reports.find((r) => r.id === reportId);
+    if (!report || !report.approval_id) return;
+    try {
+      const { error } = await supabase.functions.invoke("hod-approval", {
+        body: { approval_id: report.approval_id, action: "APPROVED" },
+      });
+      if (error) throw error;
+      await loadReports();
+    } catch (err: any) {
+      console.error("Approve failed", err);
+    } finally {
+      // no-op
+    }
   }
 
   async function handleRequestChanges(reportId: string) {
-    setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: "CHANGES_REQUESTED" } : r)));
+    const report = reports.find((r) => r.id === reportId);
+    if (!report || !report.approval_id) return;
+    try {
+      const { error } = await supabase.functions.invoke("hod-approval", {
+        body: { approval_id: report.approval_id, action: "REJECTED", comments: "Changes requested" },
+      });
+      if (error) throw error;
+      await loadReports();
+    } catch (err: any) {
+      console.error("Request changes failed", err);
+    } finally {
+      // no-op
+    }
   }
 
   function formatDateSafe(d?: string) {
@@ -116,26 +181,26 @@ export default function DepartmentAttendance() {
     return new Date(parsed).toLocaleDateString();
   }
 
-  function getStatusColor(status: AttendanceStatus) {
+  function getStatusColor(status: ApprovalStatus) {
     switch (status) {
-      case "SUBMITTED_TO_HOD":
+      case "PENDING":
         return "bg-yellow-100 text-yellow-800";
-      case "HOD_APPROVED":
+      case "APPROVED":
         return "bg-green-100 text-green-800";
-      case "CHANGES_REQUESTED":
+      case "REJECTED":
         return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   }
 
-  function getStatusIcon(status: AttendanceStatus) {
+  function getStatusIcon(status: ApprovalStatus) {
     switch (status) {
-      case "SUBMITTED_TO_HOD":
+      case "PENDING":
         return <Clock className="w-4 h-4" />;
-      case "HOD_APPROVED":
+      case "APPROVED":
         return <CheckCircle className="w-4 h-4" />;
-      case "CHANGES_REQUESTED":
+      case "REJECTED":
         return <XCircle className="w-4 h-4" />;
       default:
         return null;
@@ -219,7 +284,7 @@ export default function DepartmentAttendance() {
                     </td>
 
                     <td className="py-3 px-4">
-                      <div className="font-medium">{report.class_id}</div>
+                      <div className="font-medium">{report.class_name ?? report.class_id}</div>
                       <div className="text-xs text-slate-500">{report.semester}</div>
                     </td>
 
@@ -249,7 +314,7 @@ export default function DepartmentAttendance() {
                           <Download className="w-3 h-3" /> Export
                         </button>
 
-                        {report.status === "SUBMITTED_TO_HOD" && (
+                        {report.status === "PENDING" && (
                           <>
                             <button
                               onClick={() => handleApprove(report.id)}
@@ -334,7 +399,7 @@ export default function DepartmentAttendance() {
               </div>
 
               <div className="mt-6 flex justify-end gap-3">
-                {selectedReport.status === "SUBMITTED_TO_HOD" && (
+                {selectedReport.status === "PENDING" && (
                   <>
                     <button
                       onClick={() => {

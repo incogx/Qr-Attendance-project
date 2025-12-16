@@ -1,12 +1,13 @@
 // src/components/hod/HodSidebar.tsx
-import React, { useState } from "react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { BarChart3, Users, QrCode, CheckSquare, Bell, Settings, Menu, X, ClipboardCheck } from "lucide-react";
+import { BarChart3, Users, CheckSquare, Bell, Settings, Menu, X, ClipboardCheck } from "lucide-react";
 
 type NavItemProps = {
   to: string;
   label: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   end?: boolean;
   onClick?: () => void;
 };
@@ -65,13 +66,25 @@ export default function HodSidebar() {
             </div>
           </div>
 
-          <nav className="flex flex-col gap-2">
-            <NavItem to="/hod" label="Dashboard" icon={<BarChart3 className="w-5 h-5" />} onClick={close} end />
-            <NavItem to="/hod/faculty" label="Faculty" icon={<Users className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/attendance" label="Department Attendance" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/approvals" label="Approvals" icon={<ClipboardCheck className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />
+          {/* Sectioned navigation with generous gaps */}
+          <nav className="flex flex-col">
+            <div className="text-xs font-semibold text-slate-500 mb-2">OVERVIEW</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/hod" label="Dashboard" icon={<BarChart3 className="w-5 h-5" />} onClick={close} end />
+              <NavItem to="/hod/faculty" label="Faculty" icon={<Users className="w-5 h-5" />} onClick={close} />
+            </div>
+
+            <div className="mt-6 text-xs font-semibold text-slate-500 mb-2">ATTENDANCE</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/hod/attendance" label="Department Attendance" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
+              <NavItem to="/hod/approvals" label="Approvals" icon={<ClipboardCheck className="w-5 h-5" />} onClick={close} />
+            </div>
+
+            <div className="mt-6 text-xs font-semibold text-slate-500 mb-2">OTHER</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/hod/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
+              <NavItem to="/hod/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />
+            </div>
           </nav>
         </div>
 
@@ -107,13 +120,27 @@ export default function HodSidebar() {
             </button>
           </div>
 
-          <nav className="flex flex-col gap-2">
-            <NavItem to="/hod" label="Dashboard" icon={<BarChart3 className="w-5 h-5" />} onClick={close} end />
-            <NavItem to="/hod/faculty" label="Faculty" icon={<Users className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/attendance" label="Department Attendance" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/approvals" label="Approvals" icon={<ClipboardCheck className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
-            <NavItem to="/hod/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />
+          {/* Mobile: sectioned navigation with dividers */}
+          <nav className="flex flex-col">
+            <div className="text-xs font-semibold text-slate-500 mb-2">OVERVIEW</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/hod" label="Dashboard" icon={<BarChart3 className="w-5 h-5" />} onClick={close} end />
+              <NavItem to="/hod/faculty" label="Faculty" icon={<Users className="w-5 h-5" />} onClick={close} />
+            </div>
+
+            <div className="my-4 border-t" />
+            <div className="text-xs font-semibold text-slate-500 mb-2">ATTENDANCE</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/hod/attendance" label="Department Attendance" icon={<CheckSquare className="w-5 h-5" />} onClick={close} />
+              <NavItem to="/hod/approvals" label="Approvals" icon={<ClipboardCheck className="w-5 h-5" />} onClick={close} />
+            </div>
+
+            <div className="my-4 border-t" />
+            <div className="text-xs font-semibold text-slate-500 mb-2">OTHER</div>
+            <div className="flex flex-col gap-2">
+              <NavItem to="/hod/notifications" label="Notifications" icon={<Bell className="w-5 h-5" />} onClick={close} />
+              <NavItem to="/hod/settings" label="Settings" icon={<Settings className="w-5 h-5" />} onClick={close} />
+            </div>
           </nav>
 
           <div className="mt-6 text-xs text-gray-500">

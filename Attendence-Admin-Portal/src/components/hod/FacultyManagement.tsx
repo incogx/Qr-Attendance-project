@@ -206,28 +206,38 @@ export default function FacultyManagement() {
         .single();
 
       if (profileError) throw profileError;
-      if (!hodProfile?.department) {
-        setError("HOD department not found");
-        setLoading(false);
-        return;
-      }
+      const dept = String(hodProfile?.department || "").trim();
 
-      // Get all faculty in HOD's department
-      const { data: facultyData, error: facultyError } = await supabase
+      const baseSelect = supabase
         .from("profiles")
-        .select("id, full_name, email, department, phone")
-        .eq("department", hodProfile.department)
-        .eq("role", "FACULTY")
-        .order("full_name");
+        .select("id, full_name, email, department, phone, role")
+        .eq("role", "FACULTY");
+
+      // Prefer department-matched faculty if dept present
+      let { data: facultyData, error: facultyError } = dept
+        ? await baseSelect.eq("department", dept).order("full_name")
+        : await baseSelect.order("full_name");
 
       if (facultyError) throw facultyError;
 
+      let rows = facultyData || [];
+
+      // Fallback: include unassigned department if none found
+      if (rows.length === 0 && dept) {
+        const { data: unassigned, error: unassignedErr } = await baseSelect
+          .is("department", null)
+          .order("full_name");
+        if (!unassignedErr && unassigned) {
+          rows = unassigned;
+        }
+      }
+
       setList(
-        (facultyData || []).map((f: any) => ({
+        rows.map((f: any) => ({
           id: f.id,
           full_name: f.full_name || "Unknown",
           email: f.email,
-          department: f.department,
+          department: f.department || "",
           phone: f.phone,
         }))
       );
