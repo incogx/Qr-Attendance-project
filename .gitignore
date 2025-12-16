@@ -43,3 +43,28 @@ coverage/
 .cache/
 *.tgz
 .vercel
+
+# Build caches
+.vite/
+.eslintcache
+*.tsbuildinfo
+
+# Archives and local backups
+_archive/
+
+# Supabase CLI local files
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/.secrets*
+
+# Expo/React Native (project-specific)
+Facer_app/.expo/
+Facer_app/.expo-shared/
+Facer_app/.cache/
+Facer_app/web-build/
+Facer_app/android/
+Facer_app/ios/
+
+# OS-specific
+desktop.ini
