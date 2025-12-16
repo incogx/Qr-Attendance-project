@@ -14,7 +14,7 @@ import AnalyticsView from "../components/Analytics/AnalyticsView";
 import NotificationCenter from "../components/Notifications/NotificationCenter";
 import ContentModeration from "../components/Moderation/ContentModeration";
 import SettingsView from "../components/Settings/SettingsView";
-import ProfilePage from "../components/Common/ProfilePage";
+import ProfilePage from "../components/common/ProfilePage";
 
 // admin attendance management (ensure this file exists at this path)
 import AttendanceManagement from "../components/admin/AttendanceManagement";

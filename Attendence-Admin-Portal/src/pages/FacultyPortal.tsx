@@ -9,7 +9,7 @@ import AttendanceDetail from "../components/faculty/AttendanceDetail";
 import { Route, Routes } from "react-router-dom";
 import NotificationCenter from "../components/Notifications/NotificationCenter";
 import SettingsView from "../components/Settings/SettingsView";
-import ProfilePage from "../components/Common/ProfilePage";
+import ProfilePage from "../components/common/ProfilePage";
 
 export default function FacultyPortal() {
   return (
