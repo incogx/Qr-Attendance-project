@@ -106,7 +106,7 @@ serve(async (req) => {
       );
     }
 
-    // Insert attendance mark
+    // Insert attendance mark (manual override recorded separately from QR scans)
     const { error: insertError } = await supabaseAdmin
       .from("attendance_marks")
       .insert({
@@ -114,6 +114,10 @@ serve(async (req) => {
         class_id,
         session_id,
         status: "PRESENT",
+        source: "MANUAL",
+        token_hash: null,
+        ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+        user_agent: req.headers.get("user-agent"),
       });
 
     if (insertError) {

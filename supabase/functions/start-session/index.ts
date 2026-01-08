@@ -130,15 +130,16 @@ serve(async (req) => {
       Date.now() + expires_in_minutes * 60 * 1000
     ).toISOString();
 
-    const qrPayload = `SESSION:${crypto.randomUUID()}`;
+    const qrPayload = `SESSION:${crypto.randomUUID()}`; // seed only; live tokens are per 3s via generate-qr-token
 
     const { data: session, error: sessionError } = await supabaseAdmin
-      .from("sessions")
+      .from("attendance_sessions")
       .insert({
         class_id: classRow.id,
         qr_payload: qrPayload,
         expires_at: expiresAt,
         created_by: userId,
+        qr_rotation_seconds: 5,
       })
       .select()
       .single();
@@ -156,6 +157,7 @@ serve(async (req) => {
         class_no,
         qr_payload: qrPayload,
         expires_at: expiresAt,
+        qr_rotation_seconds: 5,
       }),
       { headers: corsHeaders }
     );
