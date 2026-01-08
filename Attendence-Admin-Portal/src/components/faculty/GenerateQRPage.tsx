@@ -29,6 +29,9 @@ type SessionRow = {
   session_date?: string | null;
   created_at?: string | null;
   expires_at?: string | null;
+  qr_rotation_seconds?: number | null;
+  last_token_issued_at?: string | null;
+  last_token_expires_at?: string | null;
 };
 
 type RosterEntry = {
@@ -50,6 +53,10 @@ export default function GenerateQRPage() {
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [activeUpdateId, setActiveUpdateId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [qrToken, setQrToken] = useState<string | null>(null);
+  const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
+  const [qrCountdown, setQrCountdown] = useState<number>(0);
+  const [nextQrToken, setNextQrToken] = useState<string | null>(null);
 
   const isLocked = session ? (session.status ?? 'ACTIVE') !== 'ACTIVE' : false;
 
@@ -89,6 +96,73 @@ export default function GenerateQRPage() {
     return () => clearInterval(interval);
   }, [session]);
 
+  useEffect(() => {
+    if (!session || (session.status ?? 'ACTIVE') !== 'ACTIVE') {
+      setQrToken(null);
+      setQrExpiresAt(null);
+      setNextQrToken(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const rotationMs = (session.qr_rotation_seconds ?? 5) * 1000;
+
+    const tick = async () => {
+      if (cancelled) return;
+      const freshToken = await fetchLiveQrToken(session);
+      if (freshToken && !cancelled) {
+        if (!qrToken) {
+          setQrToken(freshToken.token);
+          setQrExpiresAt(freshToken.expires_at);
+        } else {
+          setNextQrToken(freshToken.token);
+        }
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, rotationMs);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [session?.id, session?.status, session?.qr_rotation_seconds, qrToken]);
+
+  useEffect(() => {
+    if (!qrExpiresAt) {
+      setQrCountdown(0);
+      return undefined;
+    }
+
+    const updateCountdown = () => {
+      const msLeft = new Date(qrExpiresAt).getTime() - Date.now();
+      setQrCountdown(Math.max(0, Math.ceil(msLeft / 1000)));
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 200);
+    return () => clearInterval(timer);
+  }, [qrExpiresAt]);
+
+  useEffect(() => {
+    if (qrCountdown <= 0 && qrToken) {
+      advanceToNextQr();
+    }
+  }, [qrCountdown, qrToken]);
+
+  useEffect(() => {
+    if (qrCountdown <= 2 && session && (session.status ?? 'ACTIVE') === 'ACTIVE' && !nextQrToken) {
+      const freshTokenFetch = async () => {
+        const freshToken = await fetchLiveQrToken(session);
+        if (freshToken) {
+          setNextQrToken(freshToken.token);
+        }
+      };
+      freshTokenFetch();
+    }
+  }, [qrCountdown, session?.id, nextQrToken]);
+
   const formatDate = (value?: string | null) => {
     if (!value) return '—';
     const d = new Date(value);
@@ -97,8 +171,8 @@ export default function GenerateQRPage() {
 
   const fetchSessionRecord = async (sessionId: string): Promise<SessionRow> => {
     const { data, error: sessionError } = await supabase
-      .from('sessions')
-      .select('id, class_id, qr_payload, status, session_date, created_at, expires_at')
+      .from('attendance_sessions')
+      .select('id, class_id, qr_payload, status, session_date, created_at, expires_at, qr_rotation_seconds, last_token_issued_at, last_token_expires_at')
       .eq('id', sessionId)
       .single();
 
@@ -162,6 +236,37 @@ export default function GenerateQRPage() {
     }
 
     setStudents(studentData || []);
+  };
+
+  const fetchLiveQrToken = async (activeSession: SessionRow) => {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('generate-qr-token', {
+        body: { session_id: activeSession.id },
+      });
+
+      if (fnError) {
+        const msg = (data as any)?.error || fnError.message || 'Failed';
+        throw new Error(msg);
+      }
+
+      const result = data as any;
+      if (!result?.token || !result?.expires_at) {
+        throw new Error('Invalid response');
+      }
+
+      return { token: result.token as string, expires_at: result.expires_at as string };
+    } catch (err: any) {
+      console.error('QR fetch failed:', err.message);
+      return null;
+    }
+  };
+
+  const advanceToNextQr = () => {
+    if (nextQrToken) {
+      setQrToken(nextQrToken);
+      setQrExpiresAt(new Date(Date.now() + 5000).toISOString());
+      setNextQrToken(null);
+    }
   };
 
   const refreshAttendance = async (sessionId: string) => {
@@ -277,6 +382,8 @@ export default function GenerateQRPage() {
 
       const freshSession = await fetchSessionRecord(data.session_id);
       setSession({ ...freshSession, status: freshSession.status ?? 'ACTIVE' });
+      setQrToken(null);
+      setQrExpiresAt(null);
 
       await loadRosterAndAttendance(freshSession, input);
     } catch (err: any) {
@@ -330,6 +437,9 @@ export default function GenerateQRPage() {
     setAttendance([]);
     setClassNo('');
     setError(null);
+    setQrToken(null);
+    setQrExpiresAt(null);
+    setNextQrToken(null);
   };
 
   return (
@@ -462,12 +572,23 @@ export default function GenerateQRPage() {
               <div className="bg-gray-50 rounded-lg p-6 text-center min-h-[300px] flex flex-col items-center justify-center">
                 {(session.status ?? 'ACTIVE') === 'ACTIVE' ? (
                   <>
-                    <div className="mb-4">
-                      <QRCodeSVG value={session.qr_payload} size={256} level="H" includeMargin />
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">Payload:</p>
-                    <p className="text-xs text-gray-400 font-mono break-all max-w-xs">{session.qr_payload}</p>
-                    <p className="text-sm text-gray-600 mt-4">Students scan this QR to mark attendance</p>
+                    {qrToken ? (
+                      <>
+                        <div className="mb-4">
+                          <QRCodeSVG value={qrToken} size={256} level="H" includeMargin />
+                        </div>
+                        <div className="text-sm text-gray-600 space-y-1">
+                          <p className="text-xs">Rotates every {session.qr_rotation_seconds ?? 3}s</p>
+                          <p className="font-bold text-lg text-gray-900">Expires in {qrCountdown}s</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3 py-8">
+                        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+                        <p className="text-sm font-medium text-gray-700">Generating QR…</p>
+                        <p className="text-xs text-gray-500">Screenshots expire immediately</p>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-gray-400">Session locked</div>
