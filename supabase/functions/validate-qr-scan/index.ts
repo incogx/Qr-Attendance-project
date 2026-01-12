@@ -144,7 +144,9 @@ serve(async (req) => {
     }
 
     const now = new Date();
-    if (new Date(expires_at) <= now || new Date(issued_at) > now) {
+    const graceWindow = 3000; // 3-second grace period for time sync issues
+    
+    if (new Date(expires_at).getTime() + graceWindow < now.getTime() || new Date(issued_at) > now) {
       await logAttempt(session_id, null, null, "REJECTED", "Token expired or not yet valid", ip, device_fingerprint ?? null, userAgent);
       return new Response(
         JSON.stringify({ error: "Token expired" }),
@@ -184,7 +186,7 @@ serve(async (req) => {
       );
     }
 
-    if (new Date(tokenRow.expires_at) <= now) {
+    if (new Date(tokenRow.expires_at).getTime() + graceWindow < now.getTime()) {
       await logAttempt(session_id, null, tokenHash, "REJECTED", "Token expired", ip, device_fingerprint ?? null, userAgent);
       await supabaseAdmin
         .from("qr_tokens")

@@ -125,30 +125,28 @@ export default function LoginScreen() {
   return (
     <>
       <StatusBar style="dark" />
-      <LinearGradient colors={['#FFFFFF', '#FDF2F4', BRAND.maroonLight]} style={{ flex: 1 }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <LinearGradient colors={['#FFFFFF', '#FDF2F4', BRAND.maroonLight]} className="flex-1">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
             <TouchableOpacity
-              style={{ position: 'absolute', top: 50, left: 20, padding: 6, zIndex: 5 }}
+              className="absolute top-12 left-5 p-1.5 z-50"
               onPress={() => router.back()}
               activeOpacity={0.7}
             >
               <ArrowLeft size={22} color={BRAND.maroon} />
             </TouchableOpacity>
 
-            <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 26 }}>
-              <View style={{ alignItems: 'center', marginBottom: 28 }}>
-                <Text style={{ fontSize: 30, fontWeight: '800', color: BRAND.maroon }}>Welcome Back</Text>
-                <Text style={{ fontSize: 14, color: BRAND.muted, marginTop: 4 }}>
+            <View className="flex-1 justify-center px-6">
+              <View className="items-center mb-7">
+                <Text className="text-3xl font-extrabold" style={{ color: BRAND.maroon }}>Welcome Back</Text>
+                <Text className="text-sm mt-1" style={{ color: BRAND.muted }}>
                   Sign in with Registration Number
                 </Text>
               </View>
 
               <View
+                className="bg-white rounded-3xl p-6 shadow-lg"
                 style={{
-                  backgroundColor: BRAND.surface,
-                  borderRadius: 20,
-                  padding: 26,
                   shadowColor: '#000',
                   shadowOpacity: 0.05,
                   shadowRadius: 20,
@@ -157,17 +155,8 @@ export default function LoginScreen() {
                 }}
               >
                 {error ? (
-                  <View
-                    style={{
-                      backgroundColor: '#fef2f2',
-                      borderWidth: 1,
-                      borderColor: '#fecaca',
-                      borderRadius: 12,
-                      padding: 12,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <Text style={{ color: '#dc2626', fontSize: 14 }}>{error}</Text>
+                  <View className="bg-red-50 border border-red-300 rounded-xl p-3 mb-4">
+                    <Text className="text-red-600 text-sm">{error}</Text>
                   </View>
                 ) : null}
 

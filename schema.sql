@@ -100,3 +100,48 @@ CREATE TABLE public.system_settings (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT system_settings_pkey PRIMARY KEY (id)
 );
+
+-- QR Token Management Tables
+-- Added for secure, time-limited QR code attendance marking
+
+CREATE TABLE public.qr_tokens (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  session_id uuid NOT NULL,
+  token_hash text NOT NULL,
+  issued_at timestamp with time zone DEFAULT now(),
+  expires_at timestamp with time zone NOT NULL,
+  used boolean DEFAULT false,
+  used_at timestamp with time zone,
+  used_by uuid,
+  CONSTRAINT qr_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT qr_tokens_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE,
+  CONSTRAINT qr_tokens_used_by_fkey FOREIGN KEY (used_by) REFERENCES public.profiles(id)
+);
+
+CREATE INDEX idx_qr_tokens_session_id ON public.qr_tokens(session_id);
+CREATE INDEX idx_qr_tokens_token_hash ON public.qr_tokens(token_hash);
+CREATE INDEX idx_qr_tokens_expires_at ON public.qr_tokens(expires_at);
+
+CREATE TABLE public.scan_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  session_id uuid NOT NULL,
+  token_hash text,
+  scanned_at timestamp with time zone DEFAULT now(),
+  success boolean NOT NULL,
+  error_message text,
+  device_info jsonb,
+  CONSTRAINT scan_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT scan_logs_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT scan_logs_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id)
+);
+
+CREATE INDEX idx_scan_logs_student_id ON public.scan_logs(student_id);
+CREATE INDEX idx_scan_logs_session_id ON public.scan_logs(session_id);
+CREATE INDEX idx_scan_logs_scanned_at ON public.scan_logs(scanned_at);
+
+-- QR Token Configuration
+-- Token TTL: 15 seconds (configured in generate-qr-token edge function)
+-- Grace Period: 3 seconds (configured in validate-qr-scan edge function)
+-- Total Safe Window: 18 seconds
+-- QR Visual Rotation: 5 seconds (configurable via sessions.qr_rotation_seconds)

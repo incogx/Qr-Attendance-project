@@ -35,6 +35,15 @@ export default function ScannerScreen() {
   const [lastScan, setLastScan] = useState<LastScan | null>(null);
   const [todayStats, setTodayStats] = useState({ attended: 0, remaining: 0 });
 
+  // Config verification on mount
+  useEffect(() => {
+    console.log('=== SCANNER COMPONENT MOUNTED ===');
+    console.log('Supabase URL:', supabaseUrl);
+    console.log('Supabase URL valid:', !!supabaseUrl && supabaseUrl.includes('supabase'));
+    console.log('Supabase Anon Key exists:', !!supabaseAnonKey && supabaseAnonKey.length > 20);
+    console.log('Student authenticated:', !!student);
+  }, []);
+
   useEffect(() => {
     if (student) {
       loadTodayStats();
@@ -195,7 +204,13 @@ export default function ScannerScreen() {
       }
 
       // Step 2: After successful biometric, mark attendance
-      const EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/attendance-scan`;
+      // Use secure validator accepting rotating QR tokens
+      const EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/validate-qr-scan`;
+      
+      console.log('=== STARTING ATTENDANCE MARK ===');
+      console.log('URL:', EDGE_FUNCTION_URL);
+      console.log('Supabase URL:', supabaseUrl);
+      console.log('Has session:', !!session);
       
       // Get auth token for authenticated request
       const { data: { session } } = await supabase.auth.getSession();
@@ -206,12 +221,18 @@ export default function ScannerScreen() {
         return;
       }
 
+      console.log('Session user:', session.user?.id);
+      console.log('Token type:', typeof session.access_token);
+      console.log('Token length:', session.access_token?.length);
+
+      // New secure payload: token is the rotating QR string
       const attendancePayload = {
-        qr_payload: data?.trim() || '',
-      };
+        token: data?.trim() || '',
+      } as { token: string };
 
       console.log('Sending attendance payload:', attendancePayload);
       console.log('Calling endpoint:', EDGE_FUNCTION_URL);
+      console.log('Headers: Authorization Bearer token, Content-Type: application/json');
 
       const response = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
@@ -222,8 +243,30 @@ export default function ScannerScreen() {
         body: JSON.stringify(attendancePayload),
       });
 
-      const result = await response.json();
-      console.log('Response:', result);
+      console.log('=== RESPONSE RECEIVED ===');
+      console.log('Response status:', response.status);
+      console.log('Response statusText:', response.statusText);
+      console.log('Response ok:', response.ok);
+      console.log('Response headers:', {
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length'),
+      });
+
+      let result;
+      try {
+        const responseText = await response.text();
+        console.log('Raw response text:', responseText);
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('=== JSON PARSE ERROR ===');
+        console.error('Failed to parse response JSON:', parseError);
+        console.error('Response might be:', typeof response);
+        Alert.alert('Error', `Server error: Invalid response format\n\nStatus: ${response.status}\n\nCheck Supabase function logs for details.`);
+        resumeScanning();
+        return;
+      }
+      
+      console.log('Parsed response:', result);
 
       if (response.ok && result.success) {
         Alert.alert('Success', result.message || 'Attendance marked successfully', [
@@ -234,12 +277,30 @@ export default function ScannerScreen() {
           }}
         ]);
       } else {
-        Alert.alert('Error', result.error || result.message || 'Failed to mark attendance');
+        const errorMsg = result.error || result.message || 'Failed to mark attendance';
+        console.error('API Error:', errorMsg, 'Status:', response.status);
+        Alert.alert('Error', errorMsg);
         resumeScanning();
       }
     } catch (error: any) {
       console.error('QR scan error:', error);
-      Alert.alert('Error', `Failed to process QR code: ${error?.message || 'Unknown error'}`);
+      console.error('Error name:', error?.name);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      
+      let errorMsg = 'Connection failed';
+      
+      if (error?.message?.includes('Network')) {
+        errorMsg = 'Network unreachable - check internet connection';
+      } else if (error?.message?.includes('timeout')) {
+        errorMsg = 'Request timeout - server too slow';
+      } else if (error?.message?.includes('JSON')) {
+        errorMsg = 'Server response invalid - check Supabase status';
+      } else if (error?.message) {
+        errorMsg = error.message;
+      }
+      
+      Alert.alert('Error', `Function failed to start:\n\n${errorMsg}\n\nCheck:\n• Internet connection\n• Supabase dashboard\n• Edge function logs`);
       resumeScanning();
     } finally {
       setProcessing(false);

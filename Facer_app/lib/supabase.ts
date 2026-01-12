@@ -9,16 +9,11 @@ import { Platform } from 'react-native';
    CONFIG
 -------------------------- */
 
-const extra = (Constants.expoConfig?.extra ?? {}) as any;
-
-const SUPABASE_URL =
-  extra.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
-
-const SUPABASE_ANON_KEY =
-  extra.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error('Missing Supabase configuration');
+  throw new Error('Missing Supabase configuration: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
 }
 
 /* -------------------------

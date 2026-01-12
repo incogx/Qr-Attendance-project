@@ -578,8 +578,9 @@ export default function GenerateQRPage() {
                           <QRCodeSVG value={qrToken} size={256} level="H" includeMargin />
                         </div>
                         <div className="text-sm text-gray-600 space-y-1">
-                          <p className="text-xs">Rotates every {session.qr_rotation_seconds ?? 3}s</p>
-                          <p className="font-bold text-lg text-gray-900">Expires in {qrCountdown}s</p>
+                          <p className="text-xs">Refreshes every {session.qr_rotation_seconds ?? 5}s</p>
+                          <p className="font-bold text-lg text-gray-900">Token valid for {qrCountdown}s</p>
+                          <p className="text-xs text-gray-500">Students have 15s to scan each token</p>
                         </div>
                       </>
                     ) : (

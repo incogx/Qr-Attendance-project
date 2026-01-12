@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -19,21 +18,35 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Facer to access your camera for face capture and verification",
+          "microphonePermission": "Allow Facer to access your microphone"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Facer to access your biometric authentication"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "supabaseUrl": "https://mqnbcgatoppankntpmiu.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xbmJjZ2F0b3BwYW5rbnRwbWl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU2NDg1NzUsImV4cCI6MjA4MTIyNDU3NX0._-0le4_b_DmJG7Ama2kWEXZFXIrNFTlGpN9FE05ZwFA",
-      "router": {},
-      "eas": {
-        "projectId": "1414bc2b-c9a1-4853-9055-1f0d677f6242"
-      }
+      "router": {}
     },
     "android": {
-      "package": "com.incogx.facerapp"
+      "package": "com.incogx.facerapp",
+      "permissions": [
+        "CAMERA",
+        "USE_BIOMETRIC",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
     }
   }
 }

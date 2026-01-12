@@ -132,7 +132,7 @@ serve(async (req) => {
     }
 
     const issuedAt = new Date();
-    const expiresAt = new Date(issuedAt.getTime() + 5000); // 5 seconds
+    const expiresAt = new Date(issuedAt.getTime() + 15000); // 15 seconds
 
     const payload = {
       session_id,

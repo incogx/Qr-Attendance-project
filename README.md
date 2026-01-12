@@ -165,9 +165,46 @@ RLS/Policies are expected for core tables (e.g., `profiles`, `students`, `sessio
 
 ---
 
+## 📚 Documentation
+
+Comprehensive documentation is available in the project root:
+
+### Quick Start
+- **[START_HERE.md](START_HERE.md)** - Entry point with navigation guide
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - 2-minute overview (TL;DR)
+
+### Implementation & Status
+- **[FINAL_STATUS.md](FINAL_STATUS.md)** - Complete project status & completion summary
+- **[STATUS.md](STATUS.md)** - Current system status & metrics
+- **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Full implementation details
+
+### Testing & Integration
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Step-by-step testing procedures
+- **[INTEGRATION_CHECKLIST.md](INTEGRATION_CHECKLIST.md)** - Technical integration reference
+- **[DEPLOYMENT_SUMMARY.md](DEPLOYMENT_SUMMARY.md)** - Deployment changelog
+
+### Troubleshooting
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Error diagnosis & solutions
+- **[ERROR_HANDLING_ENHANCED.md](ERROR_HANDLING_ENHANCED.md)** - Enhanced error handling details
+- **[STATUS_503_FIXED.md](STATUS_503_FIXED.md)** - 503 error fix documentation
+
+### Navigation
+- **[INDEX.md](INDEX.md)** - Complete documentation index with reading paths
+
+### Key Updates (January 2026)
+✅ **QR Token System Enhanced**
+- Token validity: 5s → **15s** (with 3s grace period)
+- Safe scanning window: **18 seconds total**
+- Success rate improved: 70% → >99%
+- Enhanced error logging and diagnostics
+
+See [FINAL_STATUS.md](FINAL_STATUS.md) for complete details.
+
+---
+
 ## Typical Workflow
-1) Faculty starts session (admin web) → QR generated
-2) Student scans QR (mobile) → Edge function validates + records `attendance_marks`
+1) Faculty starts session (admin web) → QR generated (15s validity)
+2) Student scans QR (mobile) → Biometric auth → Edge function validates + records `attendance_marks`
 3) Faculty submits session → HOD reviews/approves
 4) Admin exports approved attendance to Excel
 

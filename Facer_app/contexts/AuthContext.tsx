@@ -27,6 +27,7 @@ type AuthContextType = {
     section: string;
   }) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshStudent: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -160,6 +161,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     console.log("✅ Auto-login successful!");
   };
 
+  // ---------- REFRESH STUDENT ----------
+  const refreshStudent = async () => {
+    if (!session?.user) {
+      setStudent(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("students")
+      .select("*")
+      .eq("id", session.user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Refresh student error:", error.message);
+      setStudent(null);
+    } else {
+      setStudent(data ?? null);
+    }
+  };
+
   // ---------- SIGN OUT ----------
   const signOut = async () => {
     setLoading(true);
@@ -180,6 +202,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         signIn,
         signUp,
         signOut,
+        refreshStudent,
       }}
     >
       {children}
